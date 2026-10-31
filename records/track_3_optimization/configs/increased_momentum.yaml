@@ -1,0 +1,136 @@
+world_size: 8
+training:
+  optimizer_groups:
+  - block_type: embed
+    optimizer: adamw
+    hyperparams:
+      lr: 0.7
+      weight_decay: 0.001
+    lr_schedule:
+      kind: piecewise_constant
+      boundaries: []
+      factors:
+      - 1.0
+  - block_type: head
+    optimizer: adamw
+    hyperparams:
+      lr: 0.004
+      weight_decay: 0.001
+    lr_schedule:
+      kind: piecewise_constant
+      boundaries: []
+      factors:
+      - 1.0
+  - block_type: block_matrices
+    optimizer: muon
+    hyperparams:
+      lr: 0.025
+      weight_decay: 0.05
+      momentum:
+        kind: ema
+        decay:
+          kind: step
+          before: 0.95
+          after: 0.9750961447125188
+          start_step: 2009
+        nesterov_mix:
+          kind: step
+          before: 0.95
+          after: 0.9750961447125188
+          start_step: 2009
+    lr_schedule:
+      kind: piecewise_constant
+      boundaries: []
+      factors:
+      - 1.0
+  - block_type: biases_and_norms
+    optimizer: adamw
+    hyperparams:
+      lr: 0.015
+      weight_decay: 0.001
+    lr_schedule:
+      kind: piecewise_constant
+      boundaries: []
+      factors:
+      - 1.0
+  loop: gpt_record
+  seed: 0
+  minibatch_seed: 0
+  batch_tokens: 524288
+  microbatch_sequences: 64
+  train_data: data/fineweb10B/fineweb_train_*.bin
+  val_data: data/fineweb10B/fineweb_val_*.bin
+  val_tokens: 10485760
+  run_id: increased_momentum
+  output_dir: ${measurement.output_dir}/training
+  resume_checkpoint: null
+  model:
+    vocab_size: 50304
+    num_layers: 12
+    model_dim: 768
+  train_steps: 3250
+  stop_step: null
+  setup:
+  - name: open_rank_zero_log
+  - name: load_validation_tokens
+  - name: build_compiled_gpt
+  - name: seed_then_initialize_parameters
+  - name: assemble_grouped_optimizer
+  - name: restore_checkpoint
+  - name: open_training_batches
+  - name: broadcast_initial_parameters
+  - name: validate_at_step_boundaries
+  pre_optimizer:
+  - name: schedule_optimizer_groups
+  post_optimizer:
+  - name: print_training_progress
+  - name: validate_at_step_boundaries
+    hyperparams:
+      every: 125
+      final_tenth_every: 25
+  teardown:
+  - name: mark_log_finished
+  wandb_offline: true
+  initialization:
+    zero_projection: true
+    weight_scales: {}
+  seed_offset: 1337
+  reseed_before_initialization: true
+  checkpoint: {}
+  metrics_snapshot:
+    quantities:
+    - weights
+    - momentum
+measurement:
+  output_dir: runs/spectrum/increased_momentum
+  capture_dir: ${measurement.output_dir}/captures
+  validation: data/fineweb10B/fineweb_val_000000.bin
+  updates: null
+  token_counts:
+  - 16777216
+  microbatch_sequences: 16
+  sequence_length: 1024
+  hvp_mode: compile
+  gemm_precision: bf16_fp32
+  matmul_precision: high
+  cpu_threads: 8
+  warm_start: null
+  reuse_previous_vector: false
+  eigensolver:
+    num_requested_eigenpairs: 1
+    krylov_basis_vector_counts:
+    - 8
+    - 16
+    - 24
+    - 32
+    - 48
+    - 64
+    - 96
+    - 128
+    comparison_window: 2
+    eigenvalue_rtol: 0.001
+    subspace_tolerance: 0.01
+    breakdown_rtol: 1.0e-12
+    symmetric: false
+    start_seed: 921
+  measure_every: 250

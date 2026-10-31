@@ -1,0 +1,13 @@
+numpy
+PyYAML
+omegaconf==2.3.0
+wandb
+tqdm
+torch==2.10
+huggingface-hub
+kernels
+setuptools
+typing-extensions==4.15.0
+datasets
+tiktoken
+pytest
