@@ -1,7 +1,19 @@
 # Bubbleforce experiments
 
-Source paths below are relative to `records/track_3_optimization/`. Run commands
-from the repository root.
+Run commands from the repository root.
+
+The repository contains:
+
+```text
+run.py          Experiment entry point
+configs/        Experiment YAML files and config dataclasses
+bubbleforce/    Measurement calculations and logging
+harness/        Training, snapshots, and checkpoints
+optimizers/     Muon and momentum implementations
+tests/          Numerical and experiment workflow checks
+data/           FineWeb download script
+requirements.txt
+```
 
 Choose an experiment from the six YAML files in `configs/`. Each file contains the training, measurement, and shared execution defaults.
 The runner merges that YAML with command-line overrides, then passes
@@ -19,7 +31,7 @@ The runner merges that YAML with command-line overrides, then passes
 ## Train and measure
 
 ```bash
-python -m records.track_3_optimization.run original_implementation
+python run.py original_implementation
 ```
 
 | YAML file | Training settings |
@@ -38,7 +50,7 @@ uses cooldown, while the intervention experiments use their constant-rate schedu
 To print the complete settings before execution:
 
 ```bash
-python -m records.track_3_optimization.run increased_momentum --print-settings
+python run.py increased_momentum --print-settings
 ```
 
 Pass changes as `key=value` arguments after the experiment name. Quote list
@@ -111,7 +123,7 @@ weights and momentum at the selected measurement updates.
 To select particular measurements and stop training after the last selected update:
 
 ```bash
-python -m records.track_3_optimization.run lr_half \
+python run.py lr_half \
   'measurement.updates=[2008,2009,2010]' measurement.output_dir=runs/spectrum/lr_half_transition
 ```
 
@@ -121,7 +133,7 @@ learning-rate schedule keeps its configured timing.
 ## Measure saved snapshots
 
 ```bash
-python -m records.track_3_optimization.run increased_momentum \
+python run.py increased_momentum \
   training=null measurement.capture_dir=/path/to/captures 'measurement.updates=[2009,2010]' \
   measurement.output_dir=runs/spectrum/increased_momentum_remeasurement
 ```
@@ -147,7 +159,7 @@ response measurements. The supplied recipes request both.
 ## Resume a training checkpoint
 
 ```bash
-python -m records.track_3_optimization.run increased_momentum \
+python run.py increased_momentum \
   training.resume_checkpoint=/path/to/captures/checkpoint_002000 \
   'measurement.updates=[2008,2009,2010]' measurement.output_dir=runs/spectrum/increased_momentum_restart
 ```
