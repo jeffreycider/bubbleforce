@@ -25,7 +25,7 @@ python data/cached_fineweb10B.py 20
 
 For all our experiments, we train on FineWeb10B with GPT-2 tokenization and next-token cross-entropy loss.
 
-All six experiments in the blog are reproducible with the yaml configs in `configs/`, which also include our specified model dimensions, batch size, and training duration.
+All six experiments in the blog are reproducible with the yaml configs in `configs/`, which also include our specified training config, bubbleforce measurement settings, and model architecture.
 
 Let's briefly walk through how we can reproduce our experiment results with various learning rate and momentum configs.
 
@@ -132,3 +132,17 @@ python run.py increased_momentum 'measurement.updates=[2008,2009,2010]' measurem
 Remove `--print-settings` to run the experiment.
 
 Edit the selected [experiment YAML](configs/) for learning rates, momentum schedules, model dimensions, and advanced solver settings.
+
+## Code guide
+
+Start with `run.py` to follow an experiment from configuration through training and measurement.
+
+| File or directory | Purpose |
+| --- | --- |
+| [run.py](run.py) | Reads experiment settings and CLI overrides, then launches training and measurement. |
+| [configs/](configs/) | Sets training, measurement, and model options through experiment YAML files and Python configuration classes. |
+| [harness/](harness/) | Defines the GPT model, runs training, saves snapshots, and restores checkpoints. Start with [loop.py](harness/loop.py) and [model_gpt.py](harness/model_gpt.py). |
+| [optimizers/ringed/](optimizers/ringed/) | Applies Muon updates and constructs EMA and MaxEnt momentum kernels. |
+| [bubbleforce/run_analysis.py](bubbleforce/run_analysis.py) | Loads saved snapshots, runs eigenvalue measurements, and calculates predicted equilibria. |
+| [bubbleforce/analysis/](bubbleforce/analysis/) | Computes Muon response derivatives, solves for eigenvalues, and calculates bubbleforce stability boundaries. |
+| [tests/](tests/) | Checks numerical calculations, configuration handling, and checkpoint workflows. |
