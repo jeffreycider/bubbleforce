@@ -77,7 +77,9 @@ def test_load_snapshot_recovers_optimizer_and_parameter_assignments(tmp_path):
     assert set(checkpoint.momenta) == set(checkpoint.vector_config.parameter_names)
     assert all(value.current_gradient_coefficient == pytest.approx(.1) for value in checkpoint.step_configs.values())
     with pytest.raises(ValueError, match='update differs'):
-        torch.save(dict(checkpoint.snapshot, update=3), checkpoint.paths[0])
+        replacement = checkpoint.paths[0].with_suffix('.replacement.pt')
+        torch.save(dict(checkpoint.snapshot, update=3), replacement)
+        replacement.replace(checkpoint.paths[0])
         load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
 
 

@@ -18,8 +18,8 @@ import torch
 import torch.distributed as dist
 from torch.distributed.launcher.api import LaunchConfig, elastic_launch
 
-from bubbleforce.logging import write_scheduled_bubbleforce
-from bubbleforce.run_analysis import predict_bubbleforce, run_measurements
+from bubbleforce.logging import write_predicted_equilibrium
+from bubbleforce.run_analysis import predict_equilibrium, run_measurements
 from harness import determinism_policy, loop
 from harness.checkpoint import training_config_fingerprint
 from harness.hooks import bind_sites
@@ -138,7 +138,7 @@ def run_experiment(
 def write_prediction_curve(
     training_config: TrainConfig | None, *, capture_dir: Path, output_dir: Path,
 ) -> None:
-    """Use current or saved training settings to predict stability at each update."""
+    """Use current or saved training settings to predict equilibrium at each update."""
     if training_config is None:
         saved_training_config_path = capture_dir / "capture_config.json"
         if not saved_training_config_path.is_file():
@@ -147,8 +147,8 @@ def write_prediction_curve(
         training_settings = json.loads(saved_training_config_path.read_text())
     else:
         training_settings = training_config.to_training_dict()
-    print("Computing scheduled stability predictions for every training update.", flush=True)
-    write_scheduled_bubbleforce(output_dir, predict_bubbleforce(training_settings))
+    print("Computing equilibrium predictions for every training update.", flush=True)
+    write_predicted_equilibrium(output_dir, predict_equilibrium(training_settings))
 
 
 def dist_timeout():

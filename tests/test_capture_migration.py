@@ -20,9 +20,6 @@ from tests.recording_helpers import (
     Model, configuration, state_for, gradients, muon_ring_digests,
 )
 from harness.recording.store import CaptureWriter, file_sha
-from optimizers.ringed.muon import (
-    zeropower_via_newtonschulz5,
-)
 
 
 class TwoBlockModel(torch.nn.Module):
@@ -114,7 +111,7 @@ def test_snapshot_records_actual_update_not_weights(tmp_path, name):
             momentum = payload["post_insertion_prepolar_momentum"]["blocks.weight"]
             torch.testing.assert_close(
                 payload["polar_output"]["blocks.weight"],
-                zeropower_via_newtonschulz5(momentum),
+                recording.optimizer.polar(momentum),
                 rtol=0,
                 atol=0,
             )

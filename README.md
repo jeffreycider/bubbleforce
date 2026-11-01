@@ -1,293 +1,220 @@
-# Bubbleforce experiments
+# Muon dynamics
 
-Run commands from the repository root.
+Experiments on momentum kernels, directional curvature and stability during
+language-model training. This repository contains our training harness,
+checkpoint and gradient capture, and reproducible analyses. It builds on
+[Keller Jordan's modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt).
 
-The repository contains:
+1. [Preliminaries](#preliminaries)
+2. [Quick start](#quick-start)
+3. [Complete documentation](#complete-documentation)
+4. [Code guide](#code-guide)
 
-```text
-run.py          Experiment entry point
-configs/        Experiment YAML files and config dataclasses
-bubbleforce/    Measurement calculations and logging
-harness/        Training, snapshots, and checkpoints
-optimizers/     Muon and momentum implementations
-tests/          Numerical and experiment workflow checks
-data/           FineWeb download script
-requirements.txt
+## Preliminaries
+
+Run commands from the repository root. Use a CUDA-enabled PyTorch installation;
+the supplied recipes use eight GPUs. Install the Python dependencies:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
-Choose an experiment from the six YAML files in `configs/`. Each file contains the training, measurement, and shared execution defaults.
-The runner merges that YAML with command-line overrides, then passes
-`TrainConfig` and `MeasurementConfig` directly to the worker functions.
+Download the FineWeb token shards once:
 
-## Setup
+```bash
+python data/cached_fineweb10B.py 20
+```
 
-1. Install `requirements.txt` in a Python environment with CUDA-enabled PyTorch.
-2. Place the FineWeb shards in `data/fineweb10B/`. To use other paths, add
-   `training.train_data` and `training.val_data` to the selected YAML, then update
-   its `measurement.validation` field.
-3. Run commands from the repository root. The supplied training settings use eight
-   GPUs. The experiment runner starts the worker processes automatically.
+## Quick start
 
-## Train and measure
+For all our experiments, we train on FineWeb10B with GPT-2 tokenization and next-token cross-entropy loss. All six experiments are reproducible with yaml configs in `configs/`, which also include our specified model dimensions, batch size, and training duration.
+
+To compute optimizer path springiness, $\zeta_t$ and bubbleforce, the runner saves weights and momentum at specified updates during training (e.g. `0, 250, 500, ..., 3000, 3249`). After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the Muon Jacobian, using 16,777,216 validation tokens per measurement. This calculation measures how Muon's normalized update responds to a small weight perturbation, holding older gradients in the momentum buffer, and AdamW parameters fixed. Then, we plot this value as optimizer path springiness, $\zeta_t$, where $t$ is the training step.
+
+Let's walk through how we can reproduce our experiment results with various learning rate and momentum configs.
+
+### Original schedule
+
+The script `run.py` trains a GPT language model from either a saved restart checkpoint or from scratch.
 
 ```bash
 python run.py original_implementation
 ```
 
-| YAML file | Training settings |
-|---|---|
-| `original_implementation.yaml` | Muon decay and Nesterov mix of `0.95`; original learning-rate cooldown |
-| `increased_momentum.yaml` | Constant learning rates; change Muon decay and Nesterov mix to `0.9750961447125188` at update `2009` |
-| `decreased_momentum.yaml` | Constant learning rates; change both values to `0.8990666066208468` at update `2009` |
-| `lr_half.yaml` | Constant learning rates before update `2009`; multiply every group's rate by `0.5` from that update |
-| `lr_double.yaml` | Constant learning rates before update `2009`; multiply every group's rate by `2` from that update |
-| `maxentslop.yaml` | Original cooldown; switch from EMA to the specified MaxEnt kernel interpolation at update `1000` |
+The trainer config (link /config/trainconfig.py) assigns learning rate, scheduling and weight decay hyperparameters. For our experiments we use Muon on the Attention and MLP weight matrices, and AdamW on the token embedding, output projection weights, biases and normalization gains.
 
-Use the filename without `.yaml` as the command's argument. The momentum
-interventions retain the earlier gradient history. The original implementation
-uses cooldown, while the intervention experiments use their constant-rate schedules.
-
-To print the complete settings before execution:
-
-```bash
-python run.py increased_momentum --print-settings
-```
-
-Pass changes as `key=value` arguments after the experiment name. Quote list
-arguments, for example `'measurement.updates=[2008,2009,2010]'`, so the shell
-passes them intact. OmegaConf merges the recipe with these changes, then constructs
-separate `TrainConfig` and `MeasurementConfig` objects. Their `__post_init__`
-methods check the values before execution.
-Use `training.model.num_layers=8` or `measurement.eigensolver.start_seed=42`
-to change nested settings. Resolve relative paths from the repository root.
-
-When printing settings, validate field types and relationships among settings.
-Before execution, check dataset files, saved snapshots, and checkpoint compatibility.
-
-## Assign optimizers to model parameters
-
-Set `block_type` and `optimizer` for each group under `training.optimizer_groups`:
-
-```yaml
-training:
-  optimizer_groups:
-  - block_type: embed
-    optimizer: adamw
-    hyperparams:
-      lr: 0.7
-      weight_decay: 0.001
-    lr_schedule:
-      kind: cooldown
-      fraction: 0.7
-```
-
-Include all four groups in each recipe:
-
-| `block_type` | Selected parameters | Supplied optimizer |
-|---|---|---|
-| `embed` | Token embedding weights | AdamW |
-| `head` | Output projection weights | AdamW |
-| `block_matrices` | Attention and MLP weight matrices in every transformer block | Muon |
-| `biases_and_norms` | Biases and normalization gains, including the output bias | AdamW |
-
-`resolve_optimizer_groups()` translates these names for the existing trainer and
-checkpoint format. Edit the `training` section of the selected YAML to change
-model dimensions, data paths, seeds, recording settings, or the setup sequence.
-The printed settings include the merged values.
-
-## Scheduled stability predictions
-
-Each experiment run writes `predicted_stability.csv` with a prediction for every
-training update. For each row, evaluate the learning-rate schedule and momentum
-kernel at that update. Truncate the kernel to the available gradient history,
-then compute the boundary. Use `--print-settings` with the same command-line overrides to inspect
-the training settings used for this curve.
-
-For `training=null`, read the schedules from the capture's `capture_config.json`.
-If that file is unavailable, compute predictions only at the saved measurement
-snapshots. Each snapshot supplies its recorded learning rate and momentum kernel.
-
-The prediction holds each update's settings fixed while solving for its stability
-boundary. It does not model evolution through future schedule changes.
-
-## Choose measurement frequency
-
-Set `measurement.measure_every` in the experiment YAML to select the expensive eigenpair measurements.
-The prediction curve still includes every update. The default value, `250`, measures
-updates `0, 250, 500, ...` and the final update. Training runs for
-`training.train_steps` updates. To save full restart checkpoints, explicitly set
-`training.checkpoint.every`, for example `500`. With this setting, save a checkpoint
-every 500 updates and at the final boundary. The default recording settings save
-weights and momentum at the selected measurement updates.
-
-To select particular measurements and stop training after the last selected update:
-
-```bash
-python run.py lr_half \
-  'measurement.updates=[2008,2009,2010]' measurement.output_dir=runs/spectrum/lr_half_transition
-```
-
-The runner keeps `training.train_steps` fixed when stopping early, so the
-learning-rate schedule keeps its configured timing.
-
-## Measure saved snapshots
-
-```bash
-python run.py increased_momentum \
-  training=null measurement.capture_dir=/path/to/captures 'measurement.updates=[2009,2010]' \
-  measurement.output_dir=runs/spectrum/increased_momentum_remeasurement
-```
-
-The runner loads the saved weights and momentum. It recovers actual learning rates
-and optimizer settings from the capture. The experiment name selects spectrum
-settings; it does not modify the saved training state.
-
-Use `measurement.validation=/path/to/fineweb_val_000000.bin` to select the measurement token
-shard. Use `world_size=N` to match the capture's process count.
-
-The schema number identifies the saved file format:
-
-| Format | Files needed for measurement |
-|---|---|
-| Schema 2 | `rankN/boundary_XXXXXX.pt`, including saved momentum coefficients |
-| Schema 3 | `rankN/metrics_snapshot_XXXXXX.pt`, plus `capture_config.json` for reconstructing momentum coefficients |
-
-Keep `capture_config.json` with schema-3 snapshots when copying them. Record
-`weights` and `momentum` under `training.metrics_snapshot.quantities` for Muon
-response measurements. The supplied recipes request both.
-
-## Resume a training checkpoint
-
-```bash
-python run.py increased_momentum \
-  training.resume_checkpoint=/path/to/captures/checkpoint_002000 \
-  'measurement.updates=[2008,2009,2010]' measurement.output_dir=runs/spectrum/increased_momentum_restart
-```
-
-1. Supply a schema-3 restart bundle from the same training recipe. Keep its
-   capture directory and referenced gradient files available. The existing loader
-   checks file hashes, recipe compatibility, and process count.
-2. Choose updates at or after the restart boundary. Checkpoint `2000` resumes
-   before update `2000`; snapshot `2000` includes that update's gradient in momentum.
-3. The runner restores weights, optimizer history, and random-number state, then
-   records and measures the selected updates. Use `'measurement.updates=[2000]'` to measure only
-   the restart boundary after computing its training gradient.
-
-## Configure the spectrum calculation
-
-Edit `measurement.eigensolver` in the selected YAML. Each file explicitly specifies
-the eigenpair count, Krylov basis sizes, comparison window, tolerances, symmetry,
-and starting seed. Keep the validation path in `measurement.validation`.
-The YAML also specifies 16,777,216 validation tokens and a microbatch of
-16 sequences. Set `world_size=N` to override the YAML process count for training
-or measurement. Keep the capture path in `measurement.capture_dir`.
-The runner measures restoring response: it differentiates the normalized Muon
-update with older gradients and Adam parameters held fixed. Set
-`measurement.eigensolver.symmetric=true` to average the projected matrix with
-its transpose before the symmetric eigensolve. With `false`, solve the projected
-matrix directly using the general eigensolver.
-The calculation uses validation loss Hessian products inside the Muon derivative.
-
-By default, each solve starts from a random direction with seed `921`. For a
-single requested eigenpair, set `reuse_previous_vector: true` to reuse the preceding
-result. Use `measurement.warm_start=/path/to/measurement` to supply the first direction.
-Compare separate random starts when checking an uncertain leading eigenvalue.
-
-The runner executes the current repository code. Historical measurements used
-earlier solver implementations and several restarted training runs. Compare
-checkpoints and numerical results before combining a new series with those results.
-
-## Read outputs
-
-The runner saves results under `measurement.output_dir`. Use that setting to choose
-another directory. Each run requires a new directory.
-
-With the supplied YAML settings, training logs and captures are saved beneath
-the measurement output directory:
+Training logs are saved in a folder that can be specified in the CLI args:
 
 ```text
-<measurement.output_dir>/
-|-- training/
-|   |-- train.log
-|   `-- wandb/                         When offline W&B logging is enabled
-|-- predicted_stability.csv
-|-- captures/
-|   |-- capture_config.json
-|   |-- rankN/
-|   |   |-- manifest.jsonl
-|   |   `-- metrics_snapshot_XXXXXX.pt
-|   `-- checkpoint_XXXXXX/             When restart checkpoints are enabled
-`-- spectra/
-    `-- update_XXXXXX/
-        |-- measurement_results.json
-        |-- eigenvalues.csv
-        |-- eigenvectors_N*_rank*.pt
-        `-- current_vector_rank*.pt
+runs/spectrum/<experiment name>/
 ```
 
-Replace `rankN` with the worker rank, such as `rank0`. Replace `XXXXXX` with
-the six-digit update or checkpoint boundary. Override `training.output_dir`
-or `measurement.capture_dir` to save those outputs elsewhere.
+Our original Muon schedule uses exponential moving average (EMA) momentum with decay `0.95` and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
 
-| Path | Contents |
-|---|---|
-| `training/train.log` | Training completion, validation losses, Git revision, PyTorch and GPU environment |
-| `training/wandb/` | Offline W&B run data when `training.wandb_offline` is enabled |
-| `predicted_stability.csv` | Per-update rates, weight decay, momentum coefficient, and predicted stability boundary |
-| `captures/capture_config.json` | Saved training settings used to reconstruct optimizer schedules and check compatibility |
-| `captures/rankN/manifest.jsonl` | File paths, sizes, and hashes for that worker's recorded tensors |
-| `captures/rankN/metrics_snapshot_XXXXXX.pt` | Selected weights and momentum for measuring a saved update |
-| `captures/checkpoint_XXXXXX/` | Completion metadata referencing the per-rank restart state, when checkpoint recording is enabled |
-| `spectra/update_XXXXXX/measurement_results.json` | Input hashes, source revision, optimizer settings, solver readouts, stability prediction |
-| `spectra/update_XXXXXX/eigenvalues.csv` | Eigenvalues, residuals, stopping reasons |
-| `spectra/update_XXXXXX/eigenvectors_N*_rank*.pt` | Final eigenvector shards |
-| `spectra/update_XXXXXX/current_vector_rank*.pt` | First eigenvector shard for initializing a later measurement, when an eigenvector was found |
+You can view each experiments settings in their respective yaml's `[original_implementation.yaml](configs/original_implementation.yaml)`, or print the settings with:
 
-Read `measurement_results.json` during a solve to inspect its latest stage and
-readouts. The writer refreshes `eigenvalues.csv` as measurements finish. Training
-progress also appears in the terminal. Offline W&B files remain local until uploaded.
-For a restart, retain the checkpoint directory together with its referenced
-per-rank checkpoint and gradient files under `captures/rankN/`.
+```bash
+python run.py original_implementation --print-settings
+```
 
-The training log records progress and the runtime environment. Measurement reports
-record results and the optimizer state used for each update. The launcher passes
-Python config objects to workers. Keep `capture_config.json` with snapshots so
-the loader can reconstruct optimizer schedules and check checkpoint compatibility.
+After the measurements finish, plot optimizer path springiness against training
+update with the example below. Run it from the repository root, changing `run_dir`
+to plot another experiment. Install the plotting packages with
+`python -m pip install pandas matplotlib`.
 
-To measure saved snapshots, set `training=null`, provide `measurement.capture_dir`
-and explicit `measurement.updates`, choose a new `measurement.output_dir`.
-Each worker measures the updates in order and saves results under
-`measurement.output_dir/spectra/update_XXXXXX/`. When
-`measurement.reuse_previous_vector` is enabled, it loads the preceding result's
-eigenvector before measuring the next update.
+```python
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
 
-## Follow the code
+run_dir = Path("runs/spectrum/original_implementation")
 
-1. Use `run.py` to merge the selected YAML and command-line overrides with
-   OmegaConf. Resolve paths and measurement updates, validate the separate configs,
-   then pass each config to its worker through PyTorch's Python launcher.
-2. `run_training(training, capture_dir, world_size)` prepares the training
-   settings and initializes distributed training. For a restart, the setup hook
-   calls `harness/checkpoint.py` to restore weights, optimizer state, gradient
-   history, and random-number state. With `training=null`, skip this call.
-3. `run_measurements(measurement)` in `bubbleforce/run_analysis.py` loads
-   snapshots, initializes worker communication, computes predictions and
-   restoring-response eigenpairs.
-4. `bubbleforce/analysis/` contains the Hessian products, Muon derivatives,
-   Krylov basis calculations, and momentum stability calculations used by the runner.
-5. `bubbleforce/logging.py` writes input hashes, solver readouts, and eigenvector
-   files. Read `measurement_results.json` for the current solve status and results.
+# Combine the measurement tables, keeping the largest eigenvalue at each update.
+tables = []
+for csv_path in run_dir.glob("spectra/update_*/eigenvalues.csv"):
+    tables.append(pd.read_csv(csv_path))
+measured = pd.concat(tables).sort_values("update")
+measured = measured[measured["mode"] == 1]
 
-Edit the selected YAML to change defaults. Use `run.py` to change experiment
-choices or checks involving training and measurement together. Use
-`configs/train_config.py` for training checks, `configs/measurement_config.py` for measurement
-and eigensolver checks.
+predicted = pd.read_csv(run_dir / "predicted_equilibrium.csv")
 
-Use `bubbleforce/load_checkpoint.py` to read model weights and per-rank
-momentum, recover optimizer settings and kernel coefficients, rebuild the model,
-load a starting eigenvector, and divide validation tokens among workers.
+plt.figure(figsize=(12, 6))
+plt.plot(predicted["update"], predicted["predicted_zeta"],
+         linestyle="--", color="black", label="Predicted equilibrium")
+plt.plot(measured["update"], measured["eigenvalue"], marker="D", label="Measured")
+plt.yscale("log")
+plt.ylim(measured["eigenvalue"].min() * 0.8, measured["eigenvalue"].max() * 1.2)
+plt.xlabel("Training update")
+plt.ylabel(r"Optimizer path springiness $\zeta_t$")
+plt.legend()
+plt.tight_layout()
+plt.savefig(run_dir / "figure.png", dpi=180)
+```
 
-For training restarts, use `training.resume_checkpoint` with a full checkpoint bundle.
-For measurements, use `training=null` with metrics snapshots. A metrics snapshot
-contains the weights and combined momentum used in the measurement; resuming
-training also requires gradient history and the other saved training state.
+### MaxEntSlop
+
+Here we switch from exponential moving average (EMA) momentum to the MaxEnt kernel at update `1000`, then interpolate its settings through to update `3250`. We retain the original learning-rate cooldown. You can read the full settings in `[maxentslop.yaml](configs/maxentslop.yaml)`.
+
+```bash
+python run.py maxentslop
+```
+
+### Double learning rate
+
+Here we use a constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `2`. You can read the full settings in `lr_double.yaml](configs/lr_double.yaml)`.
+
+```bash
+python run.py lr_double
+```
+
+### Half learning rate
+
+Here we use constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `0.5`. You can read the full settings in `lr_half.yaml](configs/lr_half.yaml)`.
+
+```bash
+python run.py lr_half
+```
+
+### Increased momentum
+
+At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.9750961447125188` which was chosen to double the maximum tolerable bubbleforce. We keep learning rates constant through training. You can read the full settings in `increased_momentum.yaml](configs/increased_momentum.yaml)`.
+
+```bash
+python run.py increased_momentum
+```
+
+### Decreased momentum
+
+At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.8990666066208468` which was chosen to halve the maximum tolerable bubbleforce. We also keep learning rates constant through training. Again, you can read the full settings in `decreased_momentum.yaml](configs/decreased_momentum.yaml)`.
+
+```bash
+python run.py decreased_momentum
+```
+
+## Complete documentation
+
+### Experiment arguments
+
+Run `python run.py EXPERIMENT key=value ...`. The experiment name is required; the selected YAML supplies defaults for the optional arguments below. Quote list overrides, for example `'measurement.updates=[2008,2009,2010]'`.
+
+#### Required argument
+
+- `experiment` [`str`]: Choose `original_implementation`, `maxentslop`, `lr_double`, `lr_half`, `increased_momentum`, or `decreased_momentum`.
+
+#### Optional arguments
+
+- `--print-settings` [`bool` flag, default: `false`]: Print the resolved settings and exit. Add the flag without a value.
+- `world_size` [`int`, default: `8`]: Set the number of GPU workers. Match the saved process count when loading snapshots or restarting training.
+- `measurement.output_dir` [`str` (path), default: `runs/spectrum/<experiment>`]: Save results in a new directory. By default, training logs go in its `training/` subdirectory and snapshots go in `captures/`.
+- `training.train_steps` [`int`, default: `3250`]: Set the training schedule length. The default runs updates `0` through `3249`; changing it also changes the learning-rate cooldown timing.
+- `training.seed` [`int`, default: `0`]: Change the model initialization seed. The trainer adds the configured seed offset before initializing parameters.
+- `training.microbatch_sequences` [`int`, default: `64`]: Process this many 1024-token sequences per GPU at a time. Reduce it to save memory; it must divide the local sequence count.
+- `measurement.measure_every` [`int`, default: `250`]: Measure every this many training updates, including update `0` and the final update.
+- `measurement.updates` [`list[int]` or `null`, default: `null`]: Measure specific updates instead of using the interval above. Unless `training.stop_step` is set, training stops after the last selected update.
+- `measurement.token_counts` [`list[int]`, default: `[16777216]`]: Calculate eigenvalues using each requested number of validation tokens across all GPUs. Supply positive, distinct, increasing counts divisible by `world_size * measurement.sequence_length`.
+- `measurement.microbatch_sequences` [`int`, default: `16`]: Process this many validation sequences per GPU at a time during measurement. Reduce it to save memory.
+- `measurement.eigensolver.num_requested_eigenpairs` [`int`, default: `1`]: Estimate this many leading positive real eigenvalues and their eigenvectors.
+
+#### Saved snapshots and restarts
+
+- `training` [`dict` or `null`, default: selected YAML's training settings]: Set `training=null` to measure saved snapshots. Supply `measurement.capture_dir` and explicit `measurement.updates`.
+- `measurement.capture_dir` [`str` (path), default: `${measurement.output_dir}/captures`]: Save or load snapshots here. Keep `capture_config.json` with the saved tensors.
+- `training.checkpoint.every` [`int`, default: `0`]: Save full restart checkpoints every this many completed updates, plus the final boundary when enabled. Zero disables periodic checkpoints.
+- `training.resume_checkpoint` [`str` (path) or `null`, default: `null`]: Resume a full checkpoint using the same training recipe and GPU count. Select measurement updates at or after the checkpoint boundary.
+
+For example, inspect settings for measurements at updates `2008`, `2009`, and `2010`:
+
+```bash
+python run.py increased_momentum 'measurement.updates=[2008,2009,2010]' measurement.output_dir=runs/spectrum/increased_momentum_transition --print-settings
+```
+
+Remove `--print-settings` to run the experiment. Edit the selected [experiment YAML](configs/) for learning rates, momentum schedules, model dimensions, and advanced solver settings. Read the [spectrum experiment instructions](docs/spectrum-experiments.md) for additional examples.
+
+## Code guide
+
+Use this guide to find the experiment and analysis code.
+
+#### Mathematical code
+
+| To inspect                                               | Open                                                                                     | Start with                                                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Arnoldi basis expansion and orthogonalization            | [bubbleforce/analysis/krylov.py](bubbleforce/analysis/krylov.py)                         | `extend_krylov_basis`; `solve_hessenberg_eigenpairs` solves the smaller projected matrix |
+| Eigenpair selection, convergence checks, residual errors | [bubbleforce/analysis/eigensolver.py](bubbleforce/analysis/eigensolver.py)               | `solve_eigenpairs`, `compute_relative_eigenpair_residuals`, `reconstruct_eigenvectors`   |
+| Muon response to weight perturbations                    | [bubbleforce/analysis/muon_step.py](bubbleforce/analysis/muon_step.py)                   | `compute_muon_response`, `compute_negative_update_jvp`                                   |
+| Newton-Schulz directional derivative                     | [bubbleforce/analysis/muon_jvp.py](bubbleforce/analysis/muon_jvp.py)                     | `linearize_newton_schulz`                                                                |
+| Bubbleforce                                              | [bubbleforce/analysis/momentum_stability.py](bubbleforce/analysis/momentum_stability.py) | `compute_bubbleforce`                                                                    |
+| Momentum coefficients across updates                     | [optimizers/ringed/momentum/schedulers.py](optimizers/ringed/momentum/schedulers.py)     | `EMA`, `KernelInterpolation`, `ScheduleSwitch`                                           |
+| Muon and MuonH weight updates                            | [optimizers/ringed/muon.py](optimizers/ringed/muon.py)                                   | `compute_weight_after_muon_step`, `compute_weight_after_muonh_step`                      |
+
+#### Run code and settings
+
+| To change or follow                                           | Open                                                             | Start with                                                                                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Experiment selection, overrides, worker launch                | [run.py](run.py)                                                 | `prepare_experiment`, `run_experiment`, `run_training`                                      |
+| Learning rates, momentum interventions, measurement frequency | [configs/](configs/)                                             | The selected experiment YAML                                                                |
+| Training settings and parameter groups                        | [train_config.py](configs/train_config.py)                       | `TrainConfig`, `resolve_optimizer_groups`                                                   |
+| Measurement settings and solver tolerances                    | [configs/measurement_config.py](configs/measurement_config.py)   | `MeasurementConfig`, `EigenSolveConfig`                                                     |
+| Snapshot measurement and scheduled predictions                | [bubbleforce/run_analysis.py](bubbleforce/run_analysis.py)       | `run_analysis`, `compute_bubbleforce_eigenpairs`, `predict_equilibrium`                     |
+| Saved weights, momentum, validation tokens                    | [bubbleforce/load_checkpoint.py](bubbleforce/load_checkpoint.py) | `load_checkpoint_for_analysis`, `load_model_from_checkpoint`, `load_validation_token_batch` |
+
+#### Logging and plots
+
+| To inspect or change                       | Open                                             | Start with                                               |
+| ------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------- |
+| JSON reports and eigenvalue CSV files      | [bubbleforce/logging.py](bubbleforce/logging.py) | `record_eigensolver_readout`, `write_measurement_report` |
+| Eigenvector files and prediction CSV files | [bubbleforce/logging.py](bubbleforce/logging.py) | `save_eigenvector_shards`, `write_predicted_equilibrium` |
+
+#### PyTorch infrastructure
+
+| To inspect or change                               | Open                                                                                     | Start with                                                                                |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Hessian-vector products, tracing, compilation      | [bubbleforce/analysis/loss_hessian.py](bubbleforce/analysis/loss_hessian.py)             | `LossHessian` applies loss curvature to a direction without constructing the full Hessian |
+| Hessian products across GPUs                       | [bubbleforce/analysis/sharded_hessian.py](bubbleforce/analysis/sharded_hessian.py)       | `compute_distributed_hvp`                                                                 |
+| Vector packing, distributed dot products and norms | [bubbleforce/analysis/sharded_vector.py](bubbleforce/analysis/sharded_vector.py)         | `pack_tensor`, `unpack_vector`, `compute_global_dot`, `compute_global_norm`               |
+| Loss derivatives with the output head held fixed   | [bubbleforce/analysis/fixed_lm_head_loss.py](bubbleforce/analysis/fixed_lm_head_loss.py) | `fixed_lm_head_cross_entropy`                                                             |
+| BF16 matrix multiplication in traced graphs        | [bubbleforce/analysis/bf16_gemm.py](bubbleforce/analysis/bf16_gemm.py)                   | `rewrite_bf16_gemms`                                                                      |
+| Device settings and worker communication           | [bubbleforce/run_analysis.py](bubbleforce/run_analysis.py)                               | `initialize_analysis_process_group`                                                       |
+
+For numerical checks, open [tests/](tests/), starting
+with `test_eigensolver_correctness.py` for solver checks or
+`test_checkpoint_spectrum.py` for snapshot measurements.

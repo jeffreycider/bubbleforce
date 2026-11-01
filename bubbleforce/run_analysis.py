@@ -58,8 +58,8 @@ def initialize_analysis_process_group(config: MeasurementConfig):
             dist.destroy_process_group()
 
 
-def predict_bubbleforce(training_config: dict, updates=None):
-    """Predict the edge of stability at each update from the training schedules.
+def predict_equilibrium(training_config: dict, updates=None):
+    """Predict equilibrium at each update from the training schedules.
 
     Evaluate the learning-rate and momentum schedules at the absolute update
     number and truncate the kernel to the available gradient history, as in
@@ -171,7 +171,7 @@ def run_analysis(
         measurement_report = dict(stage="loaded", update=update, measurements=[])
         if rank == 0:
             recipe_path = config.capture_dir / "capture_config.json"
-            stability = list(predict_bubbleforce(
+            stability = list(predict_equilibrium(
                 json.loads(recipe_path.read_text()), [checkpoint.snapshot["update"]],
             )) if recipe_path.is_file() else [
                 dict(predicted_zeta=None, reason="capture has no capture_config.json recipe"),

@@ -109,9 +109,9 @@ def save_eigenvector_shards(
         torch.save(eigenvectors[0].cpu(), output / f"current_vector_rank{rank}.pt")
 
 
-def write_scheduled_bubbleforce(output: Path, predictions) -> None:
+def write_predicted_equilibrium(output: Path, predictions) -> None:
     """Write one prediction per training update and Muon parameter group."""
-    temporary = output / "predicted_stability.csv.tmp"
+    temporary = output / "predicted_equilibrium.csv.tmp"
     with temporary.open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=(
             "update", "parameter_group", "learning_rate", "weight_decay",
@@ -120,4 +120,4 @@ def write_scheduled_bubbleforce(output: Path, predictions) -> None:
         ))
         writer.writeheader()
         writer.writerows(predictions)
-    temporary.replace(output / "predicted_stability.csv")
+    temporary.replace(output / "predicted_equilibrium.csv")
