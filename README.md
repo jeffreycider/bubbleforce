@@ -27,33 +27,6 @@ For all our experiments, we train on FineWeb10B with GPT-2 tokenization and next
 
 All six experiments in the blog are reproducible with the yaml configs in `configs/`, which also include our specified model dimensions, batch size, and training duration.
 
-### Restarting from a checkpoint
-
-If you don't want to restart training from scratch, we have provided restart checkpoints that can be loaded from [checkpoint bucket](https://huggingface.co/buckets/jacknzheng/bubbleforce) using:
-
-```bash
-hf buckets sync hf://buckets/jacknzheng/bubbleforce/restarts/decreased_momentum/decreased_momentum__checkpoint_002201 ./decreased_momentum__checkpoint_002201
-```
-
-Just set `training.resume_checkpoint` to where it is downloaded in your local directory. Warning it is ~95GB.
-
-As an example, resume the `increased_momentum` experiment from checkpoint 2000 and measure at updates 2008, 2009, and 2010:
-
-```bash
-python run.py increased_momentum \
-  training.resume_checkpoint=/path/to/captures/checkpoint_002000 \
-  'measurement.updates=[2008,2009,2010]' \
-  measurement.output_dir=runs/spectrum/increased_momentum_restart
-```
-
-The trainer config `/config/train_config.py` assigns the learning rate, scheduling and weight decay hyperparameters. For our experiments we use Muon on the Attention and MLP weight matrices, and AdamW on the token embedding, output projection weights, biases and normalization gains.
-
-The training logs are then saved in a folder that can be specified in the CLI args:
-
-```text
-runs/spectrum/<experiment name>/
-```
-
 Let's briefly walk through how we can reproduce our experiment results with various learning rate and momentum configs.
 
 ### Original schedule
@@ -65,8 +38,6 @@ python run.py original_implementation
 ```
 
 Our original Muon schedule uses exponential moving average (EMA) momentum with decay `0.95` and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
-
-To compute optimizer path springiness, $\zeta_t$ and bubbleforce, the runner saves weights and momentum at specified updates during training (e.g. `0, 250, 500, ..., 3000, 3249`). After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the Muon Jacobian, using 16,777,216 validation tokens per measurement.
 
 You can view each experiments settings in their respective yaml's, `[original_implementation.yaml](configs/original_implementation.yaml)`, or print the settings with:
 
@@ -116,9 +87,38 @@ python run.py decreased_momentum
 
 ## Complete documentation
 
+### Restarting from a checkpoint
+
+If you don't want to restart training from scratch, we have provided restart checkpoints that can be loaded from [checkpoint bucket](https://huggingface.co/buckets/jacknzheng/bubbleforce) using:
+
+```bash
+hf buckets sync hf://buckets/jacknzheng/bubbleforce/restarts/decreased_momentum/decreased_momentum__checkpoint_002201 ./decreased_momentum__checkpoint_002201
+```
+
+Just set `training.resume_checkpoint` to where it is downloaded in your local directory. Warning it is ~95GB.
+
+As an example, resume the `increased_momentum` experiment from checkpoint 2000 and measure at updates 2008, 2009, and 2010:
+
+```bash
+python run.py increased_momentum \
+  training.resume_checkpoint=/path/to/captures/checkpoint_002000 \
+  'measurement.updates=[2008,2009,2010]' \
+  measurement.output_dir=runs/spectrum/increased_momentum_restart
+```
+
+### Measurement methodology
+
+To compute optimizer path springiness, $\zeta_t$ and bubbleforce, the runner saves weights and momentum at specified updates during training (e.g. `0, 250, 500, ..., 3000, 3249`). After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the Muon Jacobian, using 16,777,216 validation tokens per measurement.
+
+The training logs are then saved in a folder that can be specified in the CLI args:
+
+```text
+runs/spectrum/<experiment name>/
+```
+
 ### Experiment arguments
 
-Run `python run.py EXPERIMENT key=value ...`. The experiment name is required; the selected YAML supplies defaults for the optional arguments below. Quote list overrides, for example `'measurement.updates=[2008,2009,2010]'`.
+To run `python run.py EXPERIMENT key=value ...`, the experiment name is required. The selected experiment YAML supplies defaults for the optional arguments below, which can be overridden by passing in the specified CLI arguments.
 
 #### Required argument
 
