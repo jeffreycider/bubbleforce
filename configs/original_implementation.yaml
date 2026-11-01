@@ -117,4 +117,4 @@ measurement:
     breakdown_rtol: 1.0e-12
     symmetric: false
     start_seed: 921
-  measure_every: 250
+  measure_every: 50

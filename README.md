@@ -33,11 +33,13 @@ Let's briefly walk through how we can reproduce our experiment results with vari
 
 The script `run.py` trains a GPT language model from either a saved restart checkpoint or from scratch.
 
+Our original implementation with Muon, uses exponential moving average (EMA) momentum with decay `0.95` and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
+
+We can run this configuration with the script and the experiment name:
+
 ```bash
 python run.py original_implementation
 ```
-
-Our original Muon schedule uses exponential moving average (EMA) momentum with decay `0.95` and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
 
 You can view each experiments settings in their respective yaml's, `[original_implementation.yaml](configs/original_implementation.yaml)`, or print the settings with:
 
@@ -45,45 +47,15 @@ You can view each experiments settings in their respective yaml's, `[original_im
 python run.py original_implementation --print-settings
 ```
 
-### MaxEntSlop
+Here are our other 5 experiments below:
 
-Here we switch from exponential moving average (EMA) momentum to the MaxEnt kernel at update `1000`, then interpolate its settings through to update `3250`. We retain the original learning-rate cooldown. You can read the full settings in `[maxentslop.yaml](configs/maxentslop.yaml)`.
-
-```bash
-python run.py maxentslop
-```
-
-### Double learning rate
-
-Here we use a constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `2`. You can read the full settings in `lr_double.yaml](configs/lr_double.yaml)`.
-
-```bash
-python run.py lr_double
-```
-
-### Half learning rate
-
-Here we use constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `0.5`. You can read the full settings in `lr_half.yaml](configs/lr_half.yaml)`.
-
-```bash
-python run.py lr_half
-```
-
-### Increased momentum
-
-At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.9750961447125188` which was chosen to double the maximum tolerable bubbleforce. We keep learning rates constant through training. You can read the full settings in `increased_momentum.yaml](configs/increased_momentum.yaml)`.
-
-```bash
-python run.py increased_momentum
-```
-
-### Decreased momentum
-
-At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.8990666066208468` which was chosen to halve the maximum tolerable bubbleforce. We also keep learning rates constant through training. Again, you can read the full settings in `decreased_momentum.yaml](configs/decreased_momentum.yaml)`.
-
-```bash
-python run.py decreased_momentum
-```
+| Experiment           | Description                                                                                                                                                                                                                                                                                                           | Command                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| MaxEntSlop           | Here we switch from exponential moving average (EMA) momentum to the MaxEnt kernel at update `1000`, then interpolate its settings through to update `3250`. We retain the original learning-rate cooldown. You can read the full settings in `[maxentslop.yaml](configs/maxentslop.yaml)`.                           | `python run.py maxentslop`         |
+| Double learning rate | Here we use a constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `2`. You can read the full settings in `lr_double.yaml](configs/lr_double.yaml)`.                                                                                                                   | `python run.py lr_double`          |
+| Half learning rate   | Here we use constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `0.5`. You can read the full settings in `lr_half.yaml](configs/lr_half.yaml)`.                                                                                                                       | `python run.py lr_half`            |
+| Increased momentum   | At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.9750961447125188` which was chosen to double the maximum tolerable bubbleforce. We keep learning rates constant through training. You can read the full settings in `increased_momentum.yaml](configs/increased_momentum.yaml)`.            | `python run.py increased_momentum` |
+| Decreased momentum   | At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.8990666066208468` which was chosen to halve the maximum tolerable bubbleforce. We also keep learning rates constant through training. Again, you can read the full settings in `decreased_momentum.yaml](configs/decreased_momentum.yaml)`. | `python run.py decreased_momentum` |
 
 ## Complete documentation
 
@@ -108,9 +80,15 @@ python run.py increased_momentum \
 
 ### Measurement methodology
 
-To compute optimizer path springiness, $\zeta_t$ and bubbleforce, the runner saves weights and momentum at specified updates during training (e.g. `0, 250, 500, ..., 3000, 3249`). After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the Muon Jacobian, using 16,777,216 validation tokens per measurement.
+To compute optimizer path springiness, $\zeta_t$ and bubbleforce, the runner saves weights and momentum at specified updates during training (e.g. `0, 50, 100, ..., 3200, 3249`). After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the Muon Jacobian, using 16,777,216 validation tokens per measurement.
 
-The training logs are then saved in a folder that can be specified in the CLI args:
+The measurement frequency can be specified with the CLI args:
+
+```bash
+python run.py increased_momentum measurement.measure_every=50
+```
+
+The measurement and training logs are then saved in a folder that can also be specified in the CLI args:
 
 ```text
 runs/spectrum/<experiment name>/
@@ -132,7 +110,7 @@ To run `python run.py EXPERIMENT key=value ...`, the experiment name is required
 - `training.train_steps` [`int`, default: `3250`]: Set the training schedule length. The default runs updates `0` through `3249`; changing it also changes the learning-rate cooldown timing.
 - `training.seed` [`int`, default: `0`]: Change the model initialization seed. The trainer adds the configured seed offset before initializing parameters.
 - `training.microbatch_sequences` [`int`, default: `64`]: Process this many 1024-token sequences per GPU at a time. Reduce it to save memory; it must divide the local sequence count.
-- `measurement.measure_every` [`int`, default: `250`]: Measure every this many training updates, including update `0` and the final update.
+- `measurement.measure_every` [`int`, default: `50`]: Measure every this many training updates, including update `0` and the final update.
 - `measurement.updates` [`list[int]` or `null`, default: `null`]: Measure specific updates instead of using the interval above. Unless `training.stop_step` is set, training stops after the last selected update.
 - `measurement.token_counts` [`list[int]`, default: `[16777216]`]: Calculate eigenvalues using each requested number of validation tokens across all GPUs. Supply positive, distinct, increasing counts divisible by `world_size * measurement.sequence_length`.
 - `measurement.microbatch_sequences` [`int`, default: `16`]: Process this many validation sequences per GPU at a time during measurement. Reduce it to save memory.

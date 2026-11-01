@@ -199,7 +199,7 @@ def test_stop_step_selects_available_measurements_without_changing_schedule():
     config = experiment_for('original_implementation', 'training.stop_step=600')
     assert config[0].train_steps == 3250
     assert config[0].stop_step == 600
-    assert config[1].updates == (0, 250, 500, 599)
+    assert config[1].updates == (*range(0, 600, 50), 599)
     config = experiment_for('original_implementation', 'measurement.updates=[10]',
                             'training.stop_step=20')
     assert config[0].stop_step == 20

@@ -16,7 +16,7 @@ def test_experiment_records_selected_measurements_without_default_restart_checkp
     config = training.to_training_dict()
     recording = Recording(config)
     assert config["minibatch_seed"] == 0
-    assert recording.snapshot_steps == set(range(0, 3250, 250)) | {3249}
+    assert recording.snapshot_steps == set(range(0, 3250, 50)) | {3249}
     assert recording.checkpoint_steps == set()
     assert recording.gradient_steps == set()
     assert recording.quantities == {"weights", "momentum"}
