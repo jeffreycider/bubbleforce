@@ -1,4 +1,4 @@
-# Muon dynamics
+# bubbleforce
 
 Experiments on momentum kernels, directional curvature and stability during
 language-model training. This repository contains our training harness,
