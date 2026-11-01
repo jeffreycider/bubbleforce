@@ -42,66 +42,104 @@ class Experiment(str, Enum):
 def prepare_experiment(
     experiment_name: Experiment | str, config_overrides: list[str] | None = None,
 ) -> tuple[TrainConfig | None, MeasurementConfig, int]:
-    """Merge experiment settings and overrides, resolve paths and updates, validate configs."""
+    """Merge an experiment YAML with CLI arg overrides and build the training and measurement configs.
+
+    Args:
+        experiment_name: Experiment whose YAML file in configs/ is loaded.
+        config_overrides: CLI key=value settings that replace YAML values.
+
+    Returns:
+        The training config (None for measurement-only runs), the measurement
+        config, and the number of worker processes.
+    """
     experiment_config_path = Path(__file__).parent / "configs" / f"{Experiment(experiment_name).value}.yaml"
-    if any("=" not in override_argument for override_argument in config_overrides or []):
-        raise ValueError("experiment overrides must use key=value")
-    merged_experiment_config = OmegaConf.merge(
+    experiment_config = OmegaConf.to_container(OmegaConf.merge(
         OmegaConf.load(experiment_config_path),
         OmegaConf.from_dotlist(config_overrides or []),
-    )
-    if unknown_experiment_settings := set(merged_experiment_config) - {"world_size", "training", "measurement"}:
-        raise ValueError(f"unknown experiment settings: {sorted(unknown_experiment_settings)}")
-    experiment_config = OmegaConf.to_container(merged_experiment_config, resolve=True)
-    world_size = experiment_config["world_size"]
-    if type(world_size) is not int or world_size < 1:
-        raise ValueError("world_size must be a positive integer")
+    ), resolve=True) # merge the configs
     training_config = (
         TrainConfig(**experiment_config["training"])
         if experiment_config["training"] is not None else None
     )
-    training_step_limit = (
-        (training_config.stop_step or training_config.train_steps)
-        if training_config is not None else None
-    )
     measurement_config = MeasurementConfig.from_dict(
-        experiment_config["measurement"], end_step=training_step_limit,
+        experiment_config["measurement"],
+        end_step=(training_config.stop_step or training_config.train_steps) if training_config is not None else None,
     )
+    check_experiment_config(experiment_config, training_config, measurement_config)
     if training_config is not None:
-        if measurement_config.updates[-1] >= training_step_limit:
-            raise ValueError("measurement updates must precede stop_step and train_steps")
         if experiment_config["measurement"]["updates"] is not None and training_config.stop_step is None:
             training_config.stop_step = measurement_config.updates[-1] + 1
         training_config.metrics_snapshot["steps"] = list(measurement_config.updates)
-    if any(
-        token_count % (experiment_config["world_size"] * measurement_config.sequence_length)
-        for token_count in measurement_config.token_counts
-    ):
-        raise ValueError("token_counts must provide whole validation sequences on every rank")
     return training_config, measurement_config, experiment_config["world_size"]
+
+
+def check_experiment_config(
+    experiment_config: dict, training_config: TrainConfig | None, measurement_config: MeasurementConfig,
+) -> None:
+    """Check the training and measurement configs to ensure that they don't contradict each other.
+
+    Args:
+        experiment_config: Merged experiment settings as a plain dict.
+        training_config: Built training config, or None for measurement-only runs.
+        measurement_config: Built measurement config.
+
+    Raises:
+        ValueError: If a top-level setting is unknown or invalid, or if the
+            training and measurement settings disagree.
+    """
+    if unknown_experiment_settings := set(experiment_config) - {"world_size", "training", "measurement"}:
+        raise ValueError(f"unknown experiment settings: {sorted(unknown_experiment_settings)}")
+    world_size = experiment_config["world_size"]
+    if type(world_size) is not int or world_size < 1:
+        raise ValueError("world_size must be a positive integer")
+    if training_config is not None and measurement_config.updates[-1] >= (training_config.stop_step or training_config.train_steps):
+        raise ValueError("measurement updates must precede stop_step and train_steps")
+    if any(token_count % (world_size * measurement_config.sequence_length) for token_count in measurement_config.token_counts):
+        raise ValueError("token_counts must provide whole validation sequences on every rank")
+
+
+def check_experiment_checkpoint_config(
+    training_config: TrainConfig, measurement_config: MeasurementConfig, world_size: int,
+) -> None:
+    """Check that the restart checkpoint config fits this experiment's config before any worker starts.
+
+    Args:
+        training_config: Training config whose resume_checkpoint is set.
+        measurement_config: Measurement config whose updates must follow the restart.
+        world_size: Number of worker processes for this run.
+
+    Raises:
+        ValueError: If the checkpoint has the wrong format or process count, starts
+            after the first requested update, or was made with a different training recipe.
+    """
+    training_settings = training_config.to_training_dict()
+    training_settings.update(
+        capture_dir=str(measurement_config.capture_dir), require_world_size=world_size,
+    )
+    checkpoint_metadata = json.loads(
+        (Path(training_config.resume_checkpoint) / "COMPLETE.json").read_text(),
+    )
+    if checkpoint_metadata.get("format") != 3 or checkpoint_metadata["world_size"] != world_size:
+        raise ValueError("resume requires a schema-3 bundle with the selected process count")
+    if measurement_config.updates[0] < checkpoint_metadata["boundary"]:
+        raise ValueError("requested updates precede the restart; select later measurement.updates")
+    if checkpoint_metadata["protocol_sha256"] != training_config_fingerprint(training_settings):
+        raise ValueError("restart recipe differs; use a checkpoint created with this experiment's training recipe")
 
 
 def run_experiment(
     training_config: TrainConfig | None, measurement_config: MeasurementConfig, world_size: int,
 ) -> None:
     """Check input files and pass config objects directly to distributed workers."""
+    if measurement_config.output_dir.exists():
+        raise FileExistsError(f"output_dir already exists; choose a new one: {measurement_config.output_dir}")
     if type(world_size) is not int or world_size < 1:
         raise ValueError("world_size must be a positive integer")
     repository_root = Path(__file__).resolve().parent
+
+    # check configs are aligned
     if training_config is not None and training_config.resume_checkpoint:
-        training_settings = training_config.to_training_dict()
-        training_settings.update(
-            capture_dir=str(measurement_config.capture_dir), require_world_size=world_size,
-        )
-        checkpoint_metadata = json.loads(
-            (Path(training_config.resume_checkpoint) / "COMPLETE.json").read_text(),
-        )
-        if checkpoint_metadata.get("format") != 3 or checkpoint_metadata["world_size"] != world_size:
-            raise ValueError("resume requires a schema-3 bundle with the selected process count")
-        if measurement_config.updates[0] < checkpoint_metadata["boundary"]:
-            raise ValueError("requested updates precede the restart; select later measurement.updates")
-        if checkpoint_metadata["protocol_sha256"] != training_config_fingerprint(training_settings):
-            raise ValueError("restart recipe differs; use a checkpoint created with this experiment's training recipe")
+        check_experiment_checkpoint_config(training_config, measurement_config, world_size)
     if not measurement_config.validation.is_file():
         raise FileNotFoundError(f"validation shard missing: {measurement_config.validation}")
     if training_config is not None:
@@ -188,11 +226,16 @@ def run_training(training_config: TrainConfig, capture_dir: Path, world_size: in
 
 
 def main() -> None:
+    def key_value_override(override: str) -> str:
+        if "=" not in override:
+            raise argparse.ArgumentTypeError("experiment overrides must use key=value")
+        return override
+
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
         "experiment", choices=[experiment_option.value for experiment_option in Experiment],
     )
-    argument_parser.add_argument("overrides", nargs="*", metavar="key=value")
+    argument_parser.add_argument("overrides", nargs="*", metavar="key=value", type=key_value_override)
     argument_parser.add_argument(
         "--print-settings", action="store_true", help="print merged settings without running workers",
     )
