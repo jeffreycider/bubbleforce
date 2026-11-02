@@ -1,9 +1,0 @@
-{
-  "pod_id": "zbhxzxh9s3nmsk",
-  "terminated": true,
-  "termination_verified": true,
-  "checked_at_utc": "2026-11-01T01:35:24.514202+00:00",
-  "elapsed_seconds": 837.1622767448425,
-  "hourly_gpu_rate_usd": 31.92,
-  "estimated_gpu_cost_usd": 7.422838853804271
-}

@@ -1,6 +1,0 @@
-{
-  "bundle": "tested-source.tar.gz",
-  "sha256": "522bf203457ba47631099c23ccd1a381566588270cb128d047ec80c76fe96e5c",
-  "requirements": "torch==2.11.0",
-  "description": "Source snapshot with the same requirements change applied before the GPU validation."
-}
