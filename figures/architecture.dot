@@ -11,7 +11,9 @@ digraph architecture {
   train [label="run_training()", URL="../run.py#L182"];
   analysis [ordering=out, label="run_analysis()\nLoad a saved update", URL="../bubbleforce/run_analysis.py#L206"];
   prepare [label="compute_bubbleforce_eigenpairs()\nFind operator Jacobian\neigenvalues and eigenvectors", URL="../bubbleforce/run_analysis.py#L151"];
-  boundary [label="compute_bubbleforce()\nFind the frozen momentum\nstability boundary", URL="../bubbleforce/analysis/compute_bubbleforce.py#L40"];
+  boundary [label="predict_bubbleforce()\nFrom training settings,\npredict bubbleforce ζ", URL="../bubbleforce/run_analysis.py#L77"];
+  prediction_writer [label="save_predicted_bubbleforce()\nCalculate and save predictions", URL="../run.py#L161"];
+  prediction_csv [label="predicted_equilibrium.csv\npredicted_zeta = bubbleforce ζ\nColumns: update, predicted_zeta"];
 
   train_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FEF3C7", color="#A16207",
                 label="TrainConfig", fontsize=11, URL="../configs/train_config.py#L55"];
@@ -29,8 +31,10 @@ digraph architecture {
   train -> analysis [style=dashed, label="saved snapshots", constraint=false];
   checkpoint -> prepare [style=dotted, label="saved model and momentum"];
   analysis -> prepare [label="MeasurementConfig"];
-  analysis -> boundary [label="TrainConfig settings from saved recipe\nvia predict_equilibrium()"];
-  { rank=same; checkpoint; prepare; boundary; }
+  analysis -> boundary [label="TrainConfig settings from saved recipe\nvia predict_bubbleforce()"];
+  boundary -> prediction_writer [label="run.py: full schedule rows"];
+  prediction_writer -> prediction_csv;
+  { rank=same; checkpoint; prepare; boundary; prediction_writer; }
 
   subgraph cluster_solver {
     return_mid;

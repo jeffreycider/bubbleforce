@@ -1,6 +1,6 @@
 # Agent guide
 
-This repository trains nanoGPT with Muon, saves optimizer state at chosen updates, and measures the optimizer's stability at those updates. The measured quantity is ζ ("zeta", called *path spring* in [README.md](README.md)); the theoretical limit it is compared with is the *predicted ζ*, derived from the *bubbleforce* boundary of the momentum kernel.
+This repository trains nanoGPT with Muon, saves optimizer state at chosen updates, and measures the optimizer's stability at those updates. The measured quantity is bubbleforce, ζ ("zeta"); compare it with predicted ζ, calculated from the stability boundary of the momentum kernel.
 
 Run every command from the repository root. Read [README.md](README.md) for the experiment story; this file covers how to drive the code, how the numbers are calculated, and how to read them.
 
@@ -264,9 +264,9 @@ Predicted ζ (no model needed):
 
 | File | Role |
 | ---- | ---- |
-| [run_analysis.py](bubbleforce/run_analysis.py) | `predict_equilibrium`: for each update and Muon group, reads η, weight decay and the momentum kernel; `predicted_zeta = (η·λ_wd + c₀·κ*) / η`. |
+| [run_analysis.py](bubbleforce/run_analysis.py) | `predict_bubbleforce`: for the single Muon group at each update, reads η, weight decay and the momentum kernel; `predicted_zeta = (η·λ_wd + c₀·κ*) / η`. |
 | [compute_bubbleforce.py](bubbleforce/analysis/compute_bubbleforce.py) | `compute_bubbleforce`: finds `κ*`, the largest curvature coupling the frozen kernel tolerates. |
-| [logging.py](bubbleforce/logging.py) | `write_predicted_equilibrium` writes `predicted_equilibrium.csv`. |
+| [run.py](run.py) | `save_predicted_bubbleforce` calculates predictions and writes `predicted_equilibrium.csv`. |
 
 ## Output files and how to read them
 
@@ -274,9 +274,9 @@ Predicted ζ (no model needed):
 <output_dir>/
   training/train.log                          training and validation loss
   captures/                                   snapshots and checkpoints (see above)
-  predicted_equilibrium.csv                   predicted ζ for every update and Muon group
+  predicted_equilibrium.csv                   predicted ζ for the single Muon group at every update
   spectra/update_<UUUUUU>/
-    measurement_results.json                  full report (rewritten as the solver progresses)
+    measurement_results.json                  measurements saved after each token-count solve
     eigenvalues.csv                           one row per (tokens, mode)
     eigenvectors_N<tokens>_rank<R>.pt         eigenvector shards
     current_vector_rank<R>.pt                 top eigenvector, usable as warm_start
@@ -284,14 +284,10 @@ Predicted ζ (no model needed):
 
 - `eigenvalues.csv`: `update, tokens, mode, eigenvalue, residual, stopping_reason`. Mode 1 is measured ζ.
 - `measurement_results.json`:
-  - `stage`: `loaded`, then `eigensolver`, then `complete`. Anything other than `complete` means the job died mid-solve.
-  - `current_readout`: the latest estimate while the solver is still running.
+  - `update`: the saved training update being measured.
+  - `measurements[].tokens`: the validation token count used for each completed solve.
   - `measurements[].readouts[]`: the eigenvalues at every basis size, which show how the estimate converged.
-  - `stability`: predicted ζ at this update.
-  - `optimizer_step_configs`: the saved η, weight decay and `c₀` per matrix.
-  - `source_revision` and `source_dirty`: the git commit, and whether the working tree had uncommitted changes.
-  - `inputs`: sha256 of every file read.
-- `predicted_equilibrium.csv`: `update, parameter_group, learning_rate, weight_decay, current_gradient_coefficient, decay_step, curvature_coupling_boundary, bubble_pressure, predicted_zeta, reason`. When `predicted_zeta` is empty, `reason` says why (for example, the learning rate is zero at the end of the cooldown).
+- `predicted_equilibrium.csv`: `update, predicted_zeta`. The runner leaves `predicted_zeta` blank for a nonpositive learning rate or current-gradient weight. Invalid kernel calculations raise an error.
 
 Checklist before interpreting a measured ζ:
 

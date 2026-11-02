@@ -5,7 +5,7 @@ This repository contains source code for the blog post by Jeffrey Cheng and Jack
 1. [Preliminaries](#preliminaries)
 2. [Start training with an experiment config](#start-training-with-an-experiment-config)
 3. [Restart training from a checkpoint](#restart-training-from-a-checkpoint)
-4. [Measure path spring at a snapshot or a given frequency](#measure-zeta-at-a-snapshot-or-a-given-frequency)
+4. [Measure bubbleforce at a snapshot or a given frequency](#measure-zeta-at-a-snapshot-or-a-given-frequency)
 5. [Experiment arguments](AGENTS.md#experiment-arguments)
 6. [Code guide](AGENTS.md#code-guide)
 7. [Codebase architecture](#codebase-architecture)
@@ -75,6 +75,10 @@ python3 run.py configs/nanogpt_muon_baseline.yaml \
   measurement.output_dir=runs/spectrum/original_trial_1
 ```
 
+The runner calls `predict_bubbleforce` for the single Muon group at every training update, then writes `update` and `predicted_zeta` to `<output_dir>/predicted_equilibrium.csv`.
+
+For a nonpositive learning rate or current-gradient weight, the runner leaves `predicted_zeta` blank. If the kernel calculation fails, it raises an error.
+
 ## Restart training from a checkpoint
 
 You may resume training from a later step by [downloading a restart checkpoint](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/restarts), and setting `training.resume_checkpoint` to its local checkpoint directory.
@@ -92,7 +96,7 @@ python3 run.py configs/decreased_momentum.yaml \
 
 ## Measure $\zeta$ at a snapshot or a given frequency
 
-To compute optimizer path spring, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
+To compute bubbleforce, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
 
 After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the normalized Muon restoring response, using 16,777,216 validation tokens per measurement.
 
@@ -106,7 +110,7 @@ python3 run.py configs/increased_momentum.yaml \
   measurement.output_dir=runs/spectrum/increased_momentum_every50
 ```
 
-![Archived increased-momentum path-spring measurements](figures/blog_six/higher_zeta_full.png)
+![Archived increased-momentum bubbleforce measurements](figures/blog_six/higher_zeta_full.png)
 
 ### Measure a saved snapshot
 
@@ -135,3 +139,5 @@ This loads the snapshot for measurement. For snapshots from your own run, point 
 ## Codebase architecture
 
 ![Software architecture diagram](figures/architecture.svg)
+
+Edit the diagram in [architecture.excalidraw](architecture.excalidraw).

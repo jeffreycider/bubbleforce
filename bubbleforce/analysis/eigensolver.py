@@ -9,7 +9,6 @@ eigenpair count.
 """
 
 from collections.abc import Callable
-from copy import deepcopy
 from enum import Enum
 from typing import NotRequired, TypedDict
 
@@ -308,7 +307,6 @@ def solve_eigenpairs( # check other PRs
     eigensolve_config: EigenSolveConfig,
     *,
     initial_basis_vector: torch.Tensor | None = None,
-    save_readouts: Callable[[EigenpairReadout], None] | None = None,
 ) -> tuple[list[EigenpairReadout], torch.Tensor]:
     """Estimate the largest positive real eigenpairs of a linear operator.
 
@@ -330,8 +328,6 @@ def solve_eigenpairs( # check other PRs
         initial_basis_vector: Optional local starting shard, shape
             (n_local_params,). Normalize globally; otherwise draw
             a random start using eigensolve_config.start_seed.
-        save_readouts: Optional callback receiving a copy of each checkpoint
-            readout before final residual evaluation.
 
     Returns:
         Return the checkpoint readouts in order and the final eigenvector
@@ -386,8 +382,6 @@ def solve_eigenpairs( # check other PRs
                 target_krylov_basis_size == krylov_basis_vector_counts[-1]
             ),
         )
-        if save_readouts is not None:
-            save_readouts(deepcopy(eigenpair_readout))
         eigenpair_readouts.append(eigenpair_readout)
         previous_hessenberg_eigenvectors = selected_hessenberg_eigenvectors
         if eigenpair_readout["stopping_reason"] is not None:

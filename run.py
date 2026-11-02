@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime
 from dataclasses import asdict
 import glob
@@ -17,8 +18,7 @@ import torch
 import torch.distributed as dist
 from torch.distributed.launcher.api import LaunchConfig, elastic_launch
 
-from bubbleforce.logging import write_predicted_equilibrium
-from bubbleforce.run_analysis import predict_equilibrium, run_measurements
+from bubbleforce.run_analysis import predict_bubbleforce, run_measurements
 from harness import loop
 from harness.checkpoint import training_config_fingerprint
 from harness.hooks import prepare_training
@@ -151,17 +151,17 @@ def run_experiment(
         elastic_launch(distributed_launch_config, run_training)(
             training_config, measurement_config.capture_dir, world_size,
         )
-    write_prediction_curve(
+    save_predicted_bubbleforce(
         training_config, capture_dir=measurement_config.capture_dir,
         output_dir=measurement_config.output_dir,
     )
     elastic_launch(distributed_launch_config, run_measurements)(measurement_config)
 
 
-def write_prediction_curve(
+def save_predicted_bubbleforce(
     training_config: TrainConfig | None, *, capture_dir: Path, output_dir: Path,
 ) -> None:
-    """Use current or saved training settings to predict equilibrium at each update."""
+    """Use current or saved training settings to predict bubbleforce at each update."""
     if training_config is None:
         saved_training_config_path = capture_dir / "capture_config.json"
         if not saved_training_config_path.is_file():
@@ -170,8 +170,13 @@ def write_prediction_curve(
         training_settings = json.loads(saved_training_config_path.read_text())
     else:
         training_settings = training_config.to_training_dict()
-    print("Computing equilibrium predictions for every training update.", flush=True)
-    write_predicted_equilibrium(output_dir, predict_equilibrium(training_settings))
+    print("Computing bubbleforce predictions for every training update.", flush=True)
+    temporary = output_dir / "predicted_equilibrium.csv.tmp"
+    with temporary.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=("update", "predicted_zeta"))
+        writer.writeheader()
+        writer.writerows(predict_bubbleforce(training_settings))
+    temporary.replace(output_dir / "predicted_equilibrium.csv")
 
 
 def dist_timeout():

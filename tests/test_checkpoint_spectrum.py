@@ -108,15 +108,10 @@ def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
     config = make_gpt_capture(tmp_path)
     result = run_analysis(config, update=2, output=config.output_dir / "spectra" / "update_000002")
     saved = json.loads((config.output_dir / 'spectra' / 'update_000002' / 'measurement_results.json').read_text())
-    assert saved['stage'] == 'complete'
-    assert saved['operator'] == 'restoring-response'
-    assert 'config' not in saved
-    assert {entry['path'] for entry in saved['inputs']} == {
-        str(config.validation), str((tmp_path / 'capture') / 'capture_config.json'),
-        str((tmp_path / 'capture') / 'rank0' / 'metrics_snapshot_000002.pt'),
-    }
+    assert set(saved) == {'update', 'measurements'}
+    assert saved['measurements'][0]['tokens'] == result[0]['tokens']
+    assert saved['measurements'][0]['readouts'][-1]['eigenvalues'] == result[0]['readouts'][-1]['eigenvalues']
     assert saved['update'] == 2
-    assert saved['output'] == str(config.output_dir / 'spectra' / 'update_000002')
     assert result[0]['readouts'][-1]['residuals']
     assert (config.output_dir / 'spectra' / 'update_000002' / 'eigenvalues.csv').read_text().count('\n') >= 2
     vectors = torch.load(config.output_dir / 'spectra' / 'update_000002' / 'eigenvectors_N2_rank0.pt', weights_only=True)
@@ -148,17 +143,10 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
     for update in config.measured_updates:
         output = config.output_dir / 'spectra' / f'update_{update:06d}'
         saved = json.loads((output / 'measurement_results.json').read_text())
-        assert saved['stage'] == 'complete'
-        assert saved['world_size'] == 2
+        assert set(saved) == {'update', 'measurements'}
         assert saved['update'] == update
-        assert 'config' not in saved
-        assert len(saved['inputs']) == (4 if update == 2 else 6)
-        previous = config.output_dir / 'spectra' / 'update_000002'
-        assert saved['warm_start'] == (None if update == 2 else str(previous))
-        if update == 3:
-            assert {str(previous / f'current_vector_rank{rank}.pt') for rank in range(2)} <= {
-                entry['path'] for entry in saved['inputs']
-            }
+        assert saved['measurements'][0]['tokens'] == 4
+        assert saved['measurements'][0]['readouts'][-1]['residuals']
         norms = []
         for rank in range(2):
             vectors = torch.load(output / f'eigenvectors_N4_rank{rank}.pt', weights_only=True)

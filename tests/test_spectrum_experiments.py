@@ -10,7 +10,7 @@ import yaml
 
 import run
 from configs.measurement_config import MeasurementConfig
-from bubbleforce.run_analysis import predict_equilibrium
+from bubbleforce.run_analysis import predict_bubbleforce
 from harness.checkpoint import training_config_fingerprint
 from harness.schedules import learning_rate_factor
 from harness.model_gpt import GPT
@@ -368,16 +368,14 @@ def test_maxentslop_predictions_recompute_both_schedules():
 
     training = experiment_for('configs/maxentslop.yaml')[0].to_training_dict()
     updates = [999, 1000, 1500, 2500]
-    rows = list(predict_equilibrium(training, updates))
+    rows = list(predict_bubbleforce(training, updates))
     assert [row['update'] for row in rows] == updates
-    assert rows[-1]['learning_rate'] < rows[1]['learning_rate']
-    assert rows[-1]['current_gradient_coefficient'] > rows[1]['current_gradient_coefficient']
     fixed_lr = deepcopy(training)
     fixed_lr['optimizer_groups'][2]['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[], factors=[1.])
     fixed_kernel = deepcopy(training)
     fixed_kernel['optimizer_groups'][2]['hyperparams']['momentum'] = dict(kind='ema', decay=.95, nesterov_mix=.95)
-    assert rows[-1]['predicted_zeta'] != pytest.approx(list(predict_equilibrium(fixed_lr, [2500]))[0]['predicted_zeta'])
-    assert rows[-1]['predicted_zeta'] != pytest.approx(list(predict_equilibrium(fixed_kernel, [2500]))[0]['predicted_zeta'])
+    assert rows[-1]['predicted_zeta'] != pytest.approx(list(predict_bubbleforce(fixed_lr, [2500]))[0]['predicted_zeta'])
+    assert rows[-1]['predicted_zeta'] != pytest.approx(list(predict_bubbleforce(fixed_kernel, [2500]))[0]['predicted_zeta'])
 
 
 def test_saved_capture_curve_uses_saved_recipe_and_all_updates(tmp_path):
@@ -389,8 +387,9 @@ def test_saved_capture_curve_uses_saved_recipe_and_all_updates(tmp_path):
     (capture / 'capture_config.json').write_text(json.dumps(training))
     output = tmp_path / 'output'
     output.mkdir()
-    run.write_prediction_curve(None, capture_dir=capture, output_dir=output)
+    run.save_predicted_bubbleforce(None, capture_dir=capture, output_dir=output)
     rows = list(csv.DictReader((output / 'predicted_equilibrium.csv').open()))
+    assert set(rows[0]) == {'update', 'predicted_zeta'}
     assert [int(row['update']) for row in rows] == [0, 1, 2, 3]
     assert sorted(path.name for path in output.iterdir()) == ['predicted_equilibrium.csv']
 
@@ -410,7 +409,7 @@ def test_saved_recipe_with_null_stop_step_predicts_every_update():
 
     training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
     training.update(train_steps=4, stop_step=None)
-    assert [row['update'] for row in predict_equilibrium(training)] == [0, 1, 2, 3]
+    assert [row['update'] for row in predict_bubbleforce(training)] == [0, 1, 2, 3]
 
 
 def test_training_run_writes_dense_predictions_between_sparse_measurements(tmp_path, monkeypatch):
@@ -440,7 +439,6 @@ def test_zero_learning_rate_records_an_unavailable_prediction():
 
     training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
     training['optimizer_groups'][2]['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[1], factors=[1., 0.])
-    rows = list(predict_equilibrium(training, [0, 1]))
+    rows = list(predict_bubbleforce(training, [0, 1]))
     assert rows[0]['predicted_zeta'] > 0
     assert rows[1]['predicted_zeta'] is None
-    assert 'positive learning rate' in rows[1]['reason']

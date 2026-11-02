@@ -6,10 +6,8 @@ distributed measurements, or use run.py to train before measuring snapshots.
 """
 
 import argparse
-from collections.abc import Callable
 from contextlib import contextmanager
 from functools import partial
-import json
 import os
 from pathlib import Path
 
@@ -29,7 +27,7 @@ from harness.schedules import learning_rate_factor
 from optimizers.ringed.momentum.config import momentum_scheduler
 from optimizers.ringed.momentum.kernel import HISTORY_LENGTH
 from bubbleforce.logging import (
-    create_measurement_output_directory, create_measurement_report, record_eigensolver_readout,
+    create_measurement_output_directory,
     save_eigenvector_shards, write_measurement_report,
 )
 
@@ -74,78 +72,50 @@ def initialize_analysis_process_group(config: MeasurementConfig):
             dist.destroy_process_group()
 
 
-def predict_equilibrium(training_config: dict, updates=None):
-    """Calculate equilibrium predictions from scheduled optimizer settings.
+def predict_bubbleforce(training_config: dict, updates=None):
+    """Apply the single Muon group's schedules and yield update/prediction pairs.
 
-    Evaluate the learning rate and momentum kernel at each absolute update.
-    Truncate the kernel to the available gradient history, then normalize its
-    weights if requested by the momentum schedule. Calculate the stability
-    boundary using those settings.
-
-    Args:
-        training_config: Resolved training settings containing train_steps,
-            optimizer_groups, and an optional stop_step.
-        updates: Optional iterable of zero-based update indices. If omitted,
-            process updates from zero up to the smaller of stop_step and
-            train_steps, excluding that endpoint.
-
-    Yields:
-        A dictionary for each requested update and Muon parameter
-        group. Include the scheduled settings and predicted_zeta. If the
-        prediction is unavailable, set predicted_zeta to None and include
-        a reason.
-
-    Raises:
-        ValueError: An update is not an integer within the training schedule,
-            or the available kernel has nonpositive mass when normalization
-            is requested.
+    Use the available gradient history at each update to calculate the boundary.
+    Yield None for a nonpositive learning rate or current-gradient weight.
+    Raise ValueError if the group count, update, or kernel is invalid.
     """
+    muon_groups = [
+        group for group in training_config["optimizer_groups"]
+        if group["optimizer"] == "muon"
+    ]
+    if len(muon_groups) != 1:
+        raise ValueError("prediction requires exactly one Muon group")
+    group = muon_groups[0]
+    hyperparams = group["hyperparams"]
+    schedule = momentum_scheduler(hyperparams["momentum"])
+    weight_decay = hyperparams.get("weight_decay", 0.)
     train_steps = training_config["train_steps"]
     if updates is None:
         stop_step = training_config.get("stop_step")
         updates = range(train_steps if stop_step is None else min(train_steps, stop_step))
-    optimizer_groups = [
-        (group, momentum_scheduler(group["hyperparams"]["momentum"]))
-        for group in training_config["optimizer_groups"]
-        if group["optimizer"] == "muon"
-    ]
+
     for update in updates:
         if type(update) is not int or not 0 <= update < train_steps:
             raise ValueError("prediction update must be within the training schedule")
-        for group, schedule in optimizer_groups:
-            learning_rate = group["hyperparams"]["lr"] * learning_rate_factor(
-                group["lr_schedule"], update, train_steps,
-            )
-            weight_decay = group["hyperparams"].get("weight_decay", 0.)
-            history_length = min(update + 1, HISTORY_LENGTH)
-            kernel = schedule(update)
-            momentum_kernel = kernel.weights[:history_length].cpu()
-            if kernel.normalize_available:
-                mass = momentum_kernel.sum()
-                if mass <= 0:
-                    raise ValueError("the available kernel mass is not positive")
-                momentum_kernel = momentum_kernel / mass
+        learning_rate = hyperparams["lr"] * learning_rate_factor(
+            group["lr_schedule"], update, train_steps,
+        )
+        kernel = schedule(update)
+        history_length = min(update + 1, HISTORY_LENGTH)
+        momentum_kernel = kernel.weights[:history_length].cpu()
+        if kernel.normalize_available:
+            mass = momentum_kernel.sum()
+            if mass <= 0:
+                raise ValueError("the available kernel mass is not positive")
+            momentum_kernel = momentum_kernel / mass
+
+        current_gradient_coefficient = float(momentum_kernel[0])
+        predicted_zeta = None
+        if learning_rate > 0 and current_gradient_coefficient > 0:
             decay_step = learning_rate * weight_decay
-            current_gradient_coefficient = float(momentum_kernel[0])
-            row = dict(
-                update=update, parameter_group=group["pattern"],
-                learning_rate=learning_rate, weight_decay=weight_decay, decay_step=decay_step,
-                current_gradient_coefficient=current_gradient_coefficient, predicted_zeta=None,
-            )
-            if learning_rate <= 0 or current_gradient_coefficient <= 0:
-                row["reason"] = "positive learning rate and current-gradient coefficient required"
-            else:
-                try:
-                    boundary = compute_bubbleforce(momentum_kernel.numpy(), decay_step=decay_step)
-                except ValueError as stability_error:
-                    row["reason"] = str(stability_error)
-                else:
-                    bubble_pressure = decay_step + current_gradient_coefficient * boundary
-                    row.update(
-                        curvature_coupling_boundary=boundary, bubble_pressure=bubble_pressure,
-                        predicted_zeta=bubble_pressure / learning_rate,
-                    )
-            yield row
+            predicted_bubbleforce = compute_bubbleforce(momentum_kernel.numpy(), decay_step=decay_step)
+            predicted_zeta = (decay_step + current_gradient_coefficient * predicted_bubbleforce) / learning_rate
+        yield dict(update=update, predicted_zeta=predicted_zeta)
 
 
 def compute_bubbleforce_eigenpairs(
@@ -154,7 +124,6 @@ def compute_bubbleforce_eigenpairs(
     validation_batch: tuple[torch.Tensor, torch.Tensor],
     token_count: int,
     initial_vector: torch.Tensor | None = None,
-    on_solver_readout: Callable[[dict], None] | None = None,
 ) -> tuple[dict, torch.Tensor]:
     """Estimate eigenpairs of the saved Muon update's restoring response.
 
@@ -174,8 +143,6 @@ def compute_bubbleforce_eigenpairs(
         initial_vector: Optional local starting vector with length
             checkpoint.vector_config.local_vector_size. If omitted, the
             solver draws a starting vector using its configured seed.
-        on_solver_readout: Optional callback accepting a dictionary of solver
-            estimates at each basis checkpoint.
 
     Returns:
         A tuple containing a measurement dictionary and this worker's
@@ -195,7 +162,7 @@ def compute_bubbleforce_eigenpairs(
         )
         readouts, eigenvectors = solve_eigenpairs(
             apply_optimizer_jacobian, vector_config, config.eigensolver,
-            initial_basis_vector=initial_vector, save_readouts=on_solver_readout,
+            initial_basis_vector=initial_vector,
         )
     finally:
         hessian.clear_program_cache()
@@ -242,31 +209,15 @@ def run_analysis(
         checkpoint = load_checkpoint_for_analysis(config.capture_dir, update, rank, world_size, device)
         initial_vector = load_initial_eigenvector(warm_start, checkpoint.vector_config)
         create_measurement_output_directory(output, rank, world_size)
-        measurement_report = dict(stage="loaded", update=update, measurements=[])
-        if rank == 0:
-            recipe_path = config.capture_dir / "capture_config.json"
-            stability = list(predict_equilibrium(
-                json.loads(recipe_path.read_text()), [checkpoint.update],
-            )) if recipe_path.is_file() else [
-                dict(predicted_zeta=None, reason="capture has no capture_config.json recipe"),
-            ]
-            measurement_report = create_measurement_report(
-                config, checkpoint, world_size, stability,
-                update=update, output=output, warm_start=warm_start,
-            )
-            write_measurement_report(output, measurement_report)
+        measurement_report = dict(update=update, measurements=[])
 
         for token_count in config.token_counts:
             validation_batch = load_validation_token_batch(
                 config.validation, token_count, rank=rank, world_size=world_size,
                 device=device, sequence_length=config.sequence_length,
             )
-            on_solver_readout = partial(
-                record_eigensolver_readout, output=output, measurement_report=measurement_report,
-                rank=rank, token_count=token_count,
-            )
             measurement, eigenvectors = compute_bubbleforce_eigenpairs(
-                config, checkpoint, validation_batch, token_count, initial_vector, on_solver_readout,
+                config, checkpoint, validation_batch, token_count, initial_vector,
             )
             measurement_report["measurements"].append(measurement)
             save_eigenvector_shards(output, token_count, rank, eigenvectors)
@@ -278,20 +229,11 @@ def run_analysis(
 
         if world_size > 1:
             dist.barrier()
-        if rank == 0:
-            measurement_report.update(stage="complete")
-            measurement_report.pop("current_readout", None)
-            write_measurement_report(output, measurement_report)
         return measurement_report["measurements"]
 
 
 def run_measurements(config: MeasurementConfig) -> None:
     """Measure selected updates and save their reports in separate directories.
-
-    Process config.measured_updates in order. Save each update under
-    config.output_dir / "spectra" / "update_{update:06d}". If vector reuse is
-    enabled, load starting vectors for the next update from the preceding
-    update's output directory.
 
     Args:
         config: Measurement settings containing the selected updates, output
