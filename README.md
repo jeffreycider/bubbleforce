@@ -6,8 +6,8 @@ This repository contains source code for the blog post by Jeffrey Cheng and Jack
 2. [Start training with an experiment config](#start-training-with-an-experiment-config)
 3. [Restart training from a checkpoint](#restart-training-from-a-checkpoint)
 4. [Measure path spring at a snapshot or a given frequency](#measure-zeta-at-a-snapshot-or-a-given-frequency)
-5. [Experiment arguments](#experiment-arguments)
-6. [Code guide](#code-guide)
+5. [Experiment arguments](AGENTS.md#experiment-arguments)
+6. [Code guide](AGENTS.md#code-guide)
 
 ## Preliminaries
 
@@ -36,15 +36,15 @@ You can select an experiment config from `configs/` to set training, measurement
 Start training from scratch with:
 
 ```bash
-python run.py original_implementation
+python run.py nanogpt_muon_baseline
 ```
 
-Our [original implementation config](configs/original_implementation.yaml) uses Muon with exponential moving average (EMA) momentum, decay `0.95`, and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
+Our [nanoGPT Muon baseline config](configs/nanogpt_muon_baseline.yaml) follows [Konstantin's PR #323](https://github.com/KellerJordan/modded-nanogpt/pull/323) and uses Muon with exponential moving average (EMA) momentum, decay `0.95`, and Nesterov mix `0.95`. The trainer holds all learning rates constant for the first 30% of training, then reduces them linearly toward zero over the remaining 70%.
 
 You can inspect the settings with:
 
 ```bash
-python run.py original_implementation --print-settings
+python run.py nanogpt_muon_baseline --print-settings
 ```
 
 Choose another experiment with its corresponding command:
@@ -70,57 +70,22 @@ runs/spectrum/<experiment>/captures/
 You can choose a different output directory by adding `measurement.output_dir=PATH` to the training command. Each run requires a directory that does not already exist. For example:
 
 ```bash
-python run.py original_implementation \
+python run.py nanogpt_muon_baseline \
   measurement.output_dir=runs/spectrum/original_trial_1
 ```
 
-With this command:
-
-- **Model and optimizer snapshots** are saved in `runs/spectrum/original_trial_1/captures/`
-- **Training logs** in `runs/spectrum/original_trial_1/training/train.log`
-- **Measurement results** in `runs/spectrum/original_trial_1/spectra/`
-
 ## Restart training from a checkpoint
 
-Since runs are expensive, if you prefer to continue a saved run, we provide snapshots and restart checkpoints in the [checkpoint bucket](https://huggingface.co/buckets/jacknzheng/bubbleforce).
-
-You can browse `snapshots/<experiment>/` or `restarts/<experiment>/` to find:
-
-- **Snapshots:** You can use a snapshot to calculate bubble pressure at a saved update.
-- **Restart checkpoints:** You can resume training from a saved update as well as compute bubble pressure.
-
-Here's how to resume training from a restart checkpoint:
-
-1. For this example, you can first download the supplied decreased-momentum restart at boundary `2201` (approximately 95 GB):
-
-   ```bash
-   hf buckets sync \
-     hf://buckets/jacknzheng/bubbleforce/restarts/decreased_momentum/decreased_momentum__checkpoint_002201 \
-     ./decreased_momentum__checkpoint_002201
-   ```
-
-2. Once the download finishes, you can set `training.resume_checkpoint` to the nested checkpoint directory, with overrides matching the saved run's 6,475-update schedule and 8 sequences per microbatch. The following command then resumes training through update `2210` and measures that update:
-
-   ```bash
-   python run.py decreased_momentum \
-     training.train_steps=6475 \
-     training.microbatch_sequences=8 \
-     training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
-     'measurement.measured_updates=[2210]' \
-     measurement.output_dir=runs/spectrum/decreased_momentum_restart
-   ```
-
-You must use the checkpoint's training recipe and GPU count. The runner stops after the last explicit measurement update unless `training.stop_step` is supplied.
-
-To save restart checkpoints during a new run, enable a checkpoint interval:
+You may resume training from a later step by [downloading a restart checkpoint](AGENTS.md#restart-training-from-a-checkpoint), set `training.resume_checkpoint` to its local checkpoint directory. This example uses eight GPUs to resume the supplied decreased-momentum run through update `2210`, then measures that update. Match the checkpoint's training settings and choose a new output directory.
 
 ```bash
-python run.py original_implementation \
-  training.checkpoint.every=500 \
-  measurement.output_dir=runs/spectrum/original_with_checkpoints
+python run.py decreased_momentum \
+  training.train_steps=6475 \
+  training.microbatch_sequences=8 \
+  training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
+  'measurement.measured_updates=[2210]' \
+  measurement.output_dir=runs/spectrum/decreased_momentum_restart
 ```
-
-This saves full checkpoints every 500 completed updates and at the final boundary, under the run's `captures/` directory.
 
 ## Measure $\zeta$ at a snapshot or a given frequency
 
@@ -130,19 +95,13 @@ After training finishes, it loads each saved update and estimates the largest po
 
 ### Specify measurement frequency
 
-If you'd like to measure $\zeta_t$ at a fixed interval, set `measurement.measure_every` to the desired interval. The default is every **50 updates**, including update `0` and the final update: `0, 50, 100, ..., 3200, 3249` for a 3,250-update run.
+If you'd like to measure $\zeta_t$ at a fixed interval, set `measurement.measure_every` to the desired interval. The default is every 50 updates.
 
 ```bash
 python run.py increased_momentum \
   measurement.measure_every=50 \
   measurement.output_dir=runs/spectrum/increased_momentum_every50
 ```
-
-The runner records snapshots during training, then computes their measurements after training.
-
-Results are saved under `spectra/update_<NNNNNN>/` within the output directory.
-
-### Graph $\zeta$
 
 ![Archived increased-momentum path-spring measurements](figures/blog_six/higher_zeta_full.png)
 
@@ -169,42 +128,6 @@ python run.py decreased_momentum \
 This loads the snapshot for measurement.
 
 You can use it to rerun the eigenvalue solver with a larger Krylov basis if the residual error is too high. For snapshots from your own run, point `measurement.capture_dir` to that run's `captures/` directory.
-
-## Experiment arguments
-
-To run `python run.py EXPERIMENT key=value ...`, the experiment name is required. The selected experiment YAML supplies defaults for the optional arguments below, which can be overridden by passing in the specified CLI arguments.
-
-### Required argument
-
-- `experiment` [`str`]: Choose `original_implementation`, `maxentslop`, `lr_double`, `lr_half`, `increased_momentum`, or `decreased_momentum`.
-
-### Optional arguments
-
-- `--print-settings` [`bool` flag, default: `false`]: Print the resolved settings and exit. Add the flag without a value.
-- `world_size` [`int`, default: `8`]: Set the number of GPU workers. Match the saved process count when loading snapshots or restarting training.
-- `measurement.output_dir` [`str` (path), default: `runs/spectrum/<experiment>`]: Save results in a new directory. By default, training logs go in its `training/` subdirectory and snapshots go in `captures/`.
-- `training.train_steps` [`int`, default: `3250`]: Set the training schedule length. The default runs updates `0` through `3249`; changing it also changes the learning-rate cooldown timing.
-- `training.seed` [`int`, default: `0`]: Change the model initialization seed. The trainer adds the configured seed offset before initializing parameters.
-- `training.microbatch_sequences` [`int`, default: `64`]: Process this many 1024-token sequences per GPU at a time. Reduce it to save memory; it must divide the local sequence count.
-- `measurement.measure_every` [`int`, default: `50`]: Measure every this many training updates, including update `0` and the final update.
-- `measurement.measured_updates` [`list[int]` or `null`, default: `null`]: Measure specific updates instead of using the interval above. Unless `training.stop_step` is set, training stops after the last selected update.
-- `measurement.token_counts` [`list[int]`, default: `[16777216]`]: Calculate eigenvalues using each requested number of validation tokens across all GPUs. Supply positive, distinct, increasing counts divisible by `world_size * measurement.sequence_length`.
-- `measurement.microbatch_sequences` [`int`, default: `16`]: Process this many validation sequences per GPU at a time during measurement. Reduce it to save memory.
-- `measurement.eigensolver.num_requested_eigenpairs` [`int`, default: `1`]: Estimate this many leading positive real eigenvalues and their eigenvectors.
-
-## Code guide
-
-Start with `run.py` to follow an experiment from configuration through training and measurement.
-
-| File or directory           | Purpose                                                                                                               |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [run.py](run.py)            | Reads experiment settings and CLI overrides, then launches training and measurement.                                  |
-| configs/                    | Sets training, measurement, and model options through experiment YAML files and Python configuration classes.         |
-| harness/                    | Defines the GPT model, runs training, saves snapshots, and restores checkpoints. Start with loop.py and model_gpt.py. |
-| optimizers/ringed/          | Applies Muon updates and constructs EMA and MaxEnt momentum kernels.                                                  |
-| bubbleforce/run_analysis.py | Loads saved snapshots, runs eigenvalue measurements, and calculates predicted equilibria.                             |
-| bubbleforce/analysis/       | Computes Muon response derivatives, solves for eigenvalues, and calculates bubbleforce stability boundaries.          |
-| tests/                      | Checks numerical calculations, configuration handling, and checkpoint workflows.                                      |
 
 ## Model config
 

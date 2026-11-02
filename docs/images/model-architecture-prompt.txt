@@ -25,7 +25,7 @@ MAIN VERTICAL COLUMN, bottom to top, connected by upward arrows:
 
 Place ONE modest orange-tinted explanatory callout to the RIGHT of the decoder container, aligned with attention, connected with a thin non-arrow leader to attention box. Heading "Inside attention"; short lines in correct processing order: "Q, K, V projections"; "RMSNorm on Q and K"; "Partial rotary positions on Q and K"; "Causal attention · scale 0.12"; "Output projection". It must not look like an additional independent model. Q and K receive normalization and rotary positions, V does not. Do not add positional embeddings below decoder. Do not draw cross-attention. Preserve pre-normalization ordering.
 
-Footer in small gray type: "Source: harness/model_gpt.py + configs/original_implementation.yaml"
+Footer in small gray type: "Source: harness/model_gpt.py + configs/nanogpt_muon_baseline.yaml"
 Use exact readable labels. Overall composition should be balanced and simple despite the necessary labels. Expand vertically as needed. All arrows flow upward; input at bottom, loss at top.
 
 Final correction: Branch the lower residual connection from the central input wire before the first RMSNorm inside the decoder block. Preserve the remaining layout and labels.

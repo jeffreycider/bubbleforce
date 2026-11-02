@@ -42,4 +42,16 @@ def learning_rate_factor(spec, step, train_steps):
         else:
             raise ValueError("unknown slow-decay schedule")
         return minimum + coefficient * (floor - minimum)
+    if kind == "piecewise_linear":
+        knots = spec["knots"]
+        knot_steps = [knot_step for knot_step, _ in knots]
+        if (not knots or knot_steps != sorted(set(knot_steps))
+                or any(not math.isfinite(factor) or factor < 0 for _, factor in knots)):
+            raise ValueError("require increasing knot steps and nonnegative factors")
+        if step <= knot_steps[0]:
+            return knots[0][1]
+        for (start_step, start_factor), (end_step, end_factor) in zip(knots, knots[1:]):
+            if step <= end_step:
+                return start_factor + (end_factor - start_factor) * (step - start_step) / (end_step - start_step)
+        return knots[-1][1]
     raise ValueError(f"unknown learning-rate policy {kind!r}")

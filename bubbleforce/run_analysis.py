@@ -102,7 +102,8 @@ def predict_equilibrium(training_config: dict, updates=None):
     """
     train_steps = training_config["train_steps"]
     if updates is None:
-        updates = range(min(train_steps, training_config.get("stop_step", train_steps)))
+        stop_step = training_config.get("stop_step")
+        updates = range(train_steps if stop_step is None else min(train_steps, stop_step))
     optimizer_groups = [
         (group, momentum_scheduler(group["hyperparams"]["momentum"]))
         for group in training_config["optimizer_groups"]

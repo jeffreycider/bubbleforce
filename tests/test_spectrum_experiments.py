@@ -45,7 +45,7 @@ def test_named_recipes_resolve_training_and_measurements(name):
 
 
 def test_nested_overrides_control_training_and_measurement_frequency(tmp_path):
-    config = experiment_for('original_implementation', 'measurement.measure_every=300',
+    config = experiment_for('nanogpt_muon_baseline', 'measurement.measure_every=300',
                             'training.train_steps=1000', f'measurement.output_dir={tmp_path / "custom_results"}')
     assert config[1].measured_updates == (0, 300, 600, 900, 999)
     assert config[0].metrics_snapshot['steps'] == [0, 300, 600, 900, 999]
@@ -87,7 +87,7 @@ def test_momentum_intervention_retains_the_pre_switch_decay_history(name, beta, 
 
 
 def test_original_and_maxent_keep_cooldown():
-    for name in ['original_implementation', 'maxentslop']:
+    for name in ['nanogpt_muon_baseline', 'maxentslop']:
         config = experiment_for(name)[0].to_training_dict()
         for group in config['optimizer_groups']:
             assert learning_rate_factor(group['lr_schedule'], 2009, 3250) == pytest.approx((1 - 2009 / 3250) / .7)
@@ -96,7 +96,7 @@ def test_original_and_maxent_keep_cooldown():
 
 
 def test_measurement_only_overrides_paths_and_process_count(tmp_path):
-    config = experiment_for('original_implementation', 'training=null',
+    config = experiment_for('nanogpt_muon_baseline', 'training=null',
                             f'measurement.capture_dir={tmp_path / "captures"}',
                             'measurement.measured_updates=[975,1000]', 'world_size=2')
     assert config[0] is None
@@ -106,20 +106,20 @@ def test_measurement_only_overrides_paths_and_process_count(tmp_path):
 
 
 def test_measurement_only_accepts_updates_beyond_the_training_recipe():
-    config = experiment_for('original_implementation', 'training=null', 'measurement.measured_updates=[4800]')
+    config = experiment_for('nanogpt_muon_baseline', 'training=null', 'measurement.measured_updates=[4800]')
     assert config[1].measured_updates == (4800,)
 
 
 @pytest.mark.parametrize('override', ['training.capture_dir=other', 'measurement.capture=other'])
 def test_capture_directory_is_only_a_measurement_setting(override):
     with pytest.raises(TypeError, match='unexpected keyword'):
-        experiment_for('original_implementation', override)
+        experiment_for('nanogpt_muon_baseline', override)
 
 
 @pytest.mark.parametrize('reuse_previous_vector', [False, True])
 def test_shared_measurement_config_round_trips_paths_and_updates(tmp_path, reuse_previous_vector):
     initial_vector = tmp_path / 'initial_vector'
-    config = experiment_for('original_implementation', 'measurement.measured_updates=[20,10]',
+    config = experiment_for('nanogpt_muon_baseline', 'measurement.measured_updates=[20,10]',
                             f'measurement.warm_start={initial_vector}', f'measurement.output_dir={tmp_path / "result"}',
                             f'measurement.reuse_previous_vector={str(reuse_previous_vector).lower()}')
     measurement = config[1]
@@ -157,7 +157,7 @@ def test_restart_preserves_training_recipe_and_stops_after_requested_update(tmp_
 @pytest.mark.parametrize('arguments', [('world_size=0',), ('measurement.measured_updates=[3250]',), ('world_size=3',)])
 def test_invalid_training_requests_fail_before_launch(arguments):
     with pytest.raises(ValueError):
-        experiment_for('original_implementation', *arguments)
+        experiment_for('nanogpt_muon_baseline', *arguments)
 
 
 @pytest.mark.parametrize('override', [
@@ -166,7 +166,7 @@ def test_invalid_training_requests_fail_before_launch(arguments):
 ])
 def test_structured_plan_rejects_unknown_settings(override):
     with pytest.raises((TypeError, ValueError)):
-        experiment_for('original_implementation', override)
+        experiment_for('nanogpt_muon_baseline', override)
 
 
 @pytest.mark.parametrize('override', [
@@ -175,7 +175,7 @@ def test_structured_plan_rejects_unknown_settings(override):
 ])
 def test_structured_plan_rejects_invalid_types_and_enum_values(override):
     with pytest.raises(ValueError):
-        experiment_for('original_implementation', override)
+        experiment_for('nanogpt_muon_baseline', override)
 
 
 @pytest.mark.parametrize('overrides,message', [
@@ -192,22 +192,22 @@ def test_structured_plan_rejects_invalid_types_and_enum_values(override):
 ])
 def test_plan_checks_related_settings_before_execution(overrides, message):
     with pytest.raises(ValueError, match=message):
-        experiment_for('original_implementation', *overrides)
+        experiment_for('nanogpt_muon_baseline', *overrides)
 
 
 def test_stop_step_selects_available_measurements_without_changing_schedule():
-    config = experiment_for('original_implementation', 'training.stop_step=600')
+    config = experiment_for('nanogpt_muon_baseline', 'training.stop_step=600')
     assert config[0].train_steps == 3250
     assert config[0].stop_step == 600
     assert config[1].measured_updates == (*range(0, 600, 50), 599)
-    config = experiment_for('original_implementation', 'measurement.measured_updates=[10]',
+    config = experiment_for('nanogpt_muon_baseline', 'measurement.measured_updates=[10]',
                             'training.stop_step=20')
     assert config[0].stop_step == 20
 
 
 def test_preview_does_not_require_checkpoint_or_data_files(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(run.sys, 'argv', [
-        'run', 'original_implementation', 'measurement.measured_updates=[2009]',
+        'run', 'nanogpt_muon_baseline', 'measurement.measured_updates=[2009]',
         f'training.resume_checkpoint={tmp_path / "missing_checkpoint"}',
         f'measurement.validation={tmp_path / "missing_validation.bin"}',
         f'measurement.output_dir={tmp_path / "unused"}', '--print-settings',
@@ -226,7 +226,7 @@ def test_run_passes_measurement_config_without_writing_settings(tmp_path, monkey
     (capture / 'metrics_snapshot_001000.pt').touch()
     validation = tmp_path / 'validation.bin'
     validation.touch()
-    config = experiment_for('original_implementation', 'training=null', f'measurement.capture_dir={capture.parent}',
+    config = experiment_for('nanogpt_muon_baseline', 'training=null', f'measurement.capture_dir={capture.parent}',
                             'measurement.measured_updates=[975,1000]', 'world_size=1',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}')
     calls = []
@@ -247,7 +247,7 @@ def test_missing_later_snapshot_fails_before_launch(tmp_path, monkeypatch):
     (capture / 'metrics_snapshot_000975.pt').touch()
     validation = tmp_path / 'validation.bin'
     validation.touch()
-    config = experiment_for('original_implementation', 'training=null', f'measurement.capture_dir={capture.parent}',
+    config = experiment_for('nanogpt_muon_baseline', 'training=null', f'measurement.capture_dir={capture.parent}',
                             'measurement.measured_updates=[975,1000]', 'world_size=1',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}')
     def reject_launch(*args, **kwargs):
@@ -262,7 +262,7 @@ def test_named_groups_select_the_expected_gpt_parameters():
 
     with torch.device('meta'):
         model = GPT(vocab_size=16, num_layers=1, model_dim=128)
-    groups = GroupedOptimizers(model, experiment_for('original_implementation')[0].to_training_dict()['optimizer_groups'])
+    groups = GroupedOptimizers(model, experiment_for('nanogpt_muon_baseline')[0].to_training_dict()['optimizer_groups'])
     names = {id(parameter): name for name, parameter in model.named_parameters()}
     selected = [{names[id(parameter)] for group in optimizer.param_groups for parameter in group['params']}
                 for _, optimizer in groups.groups]
@@ -283,7 +283,7 @@ def test_named_groups_select_the_expected_gpt_parameters():
 @pytest.mark.parametrize('change, message', [('unknown', 'unknown'), ('duplicate', 'duplicate'), ('missing', 'missing')])
 def test_invalid_model_group_assignments_fail_before_training(change, message):
 
-    groups = experiment_for('original_implementation')[0].optimizer_groups
+    groups = experiment_for('nanogpt_muon_baseline')[0].optimizer_groups
     if change == 'unknown':
         groups[0]['block_type'] = 'embedding_typo'
     elif change == 'duplicate':
@@ -296,8 +296,8 @@ def test_invalid_model_group_assignments_fail_before_training(change, message):
 
 def test_training_default_lists_are_independent():
 
-    first = experiment_for('original_implementation')[0]
-    second = experiment_for('original_implementation')[0]
+    first = experiment_for('nanogpt_muon_baseline')[0]
+    second = experiment_for('nanogpt_muon_baseline')[0]
     first.setup[0]['name'] = 'changed'
     first.model['num_layers'] = 1
     assert second.setup[0]['name'] == 'open_rank_zero_log'
@@ -307,7 +307,7 @@ def test_training_default_lists_are_independent():
 def test_print_settings_resolves_defaults_and_keeps_named_groups(tmp_path, monkeypatch, capsys):
     output = tmp_path / 'unused'
     monkeypatch.setattr(run.sys, 'argv', [
-        'run', 'original_implementation', 'measurement.measured_updates=[2009]',
+        'run', 'nanogpt_muon_baseline', 'measurement.measured_updates=[2009]',
         f'measurement.output_dir={output}', '--print-settings',
     ])
     def reject_launch(*args, **kwargs):
@@ -354,12 +354,30 @@ def test_saved_capture_curve_uses_saved_recipe_and_all_updates(tmp_path):
     assert sorted(path.name for path in output.iterdir()) == ['predicted_equilibrium.csv']
 
 
+def test_piecewise_linear_holds_end_knots_and_interpolates_between():
+
+    schedule = dict(kind='piecewise_linear', knots=[[975, 1.], [2474, 1.], [2974, 2.]])
+    assert learning_rate_factor(schedule, 0, 6475) == 1.
+    assert learning_rate_factor(schedule, 2474, 6475) == 1.
+    assert learning_rate_factor(schedule, 2724, 6475) == pytest.approx(1.5)
+    assert learning_rate_factor(schedule, 5000, 6475) == 2.
+    with pytest.raises(ValueError, match='increasing knot steps'):
+        learning_rate_factor(dict(kind='piecewise_linear', knots=[[10, 1.], [5, 1.]]), 0, 20)
+
+
+def test_saved_recipe_with_null_stop_step_predicts_every_update():
+
+    training = experiment_for('nanogpt_muon_baseline')[0].to_training_dict()
+    training.update(train_steps=4, stop_step=None)
+    assert [row['update'] for row in predict_equilibrium(training)] == [0, 1, 2, 3]
+
+
 def test_training_run_writes_dense_predictions_between_sparse_measurements(tmp_path, monkeypatch):
     validation = tmp_path / 'validation.bin'
     validation.touch()
     training_shard = tmp_path / 'train.bin'
     training_shard.touch()
-    config = experiment_for('original_implementation', 'measurement.measured_updates=[2]',
+    config = experiment_for('nanogpt_muon_baseline', 'measurement.measured_updates=[2]',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}',
                             f'training.train_data={training_shard}')
     calls = []
@@ -379,7 +397,7 @@ def test_training_run_writes_dense_predictions_between_sparse_measurements(tmp_p
 
 def test_zero_learning_rate_records_an_unavailable_prediction():
 
-    training = experiment_for('original_implementation')[0].to_training_dict()
+    training = experiment_for('nanogpt_muon_baseline')[0].to_training_dict()
     training['optimizer_groups'][2]['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[1], factors=[1., 0.])
     rows = list(predict_equilibrium(training, [0, 1]))
     assert rows[0]['predicted_zeta'] > 0

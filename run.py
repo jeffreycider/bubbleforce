@@ -29,7 +29,7 @@ from configs.train_config import TrainConfig
 
 
 class Experiment(str, Enum):
-    original_implementation = "original_implementation"
+    nanogpt_muon_baseline = "nanogpt_muon_baseline"
     increased_momentum = "increased_momentum"
     decreased_momentum = "decreased_momentum"
     lr_half = "lr_half"
@@ -151,8 +151,6 @@ def run_experiment(
                 )
                 if not snapshot_path.is_file():
                     raise FileNotFoundError(f"measurement snapshot missing: {snapshot_path}")
-    if os.environ.get("CAPTURE_ROOT"):
-        raise ValueError("unset CAPTURE_ROOT so training uses measurement.capture_dir")
     measurement_config.output_dir.mkdir(parents=True, exist_ok=False)
     distributed_launch_config = LaunchConfig(
         min_nodes=1, max_nodes=1, nproc_per_node=world_size,

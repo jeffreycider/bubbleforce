@@ -45,7 +45,7 @@ training:
   train_data: data/fineweb10B/fineweb_train_*.bin
   val_data: data/fineweb10B/fineweb_val_*.bin
   val_tokens: 10485760
-  run_id: original_implementation
+  run_id: nanogpt_muon_baseline
   output_dir: ${measurement.output_dir}/training
   resume_checkpoint: null
   model:
@@ -66,7 +66,7 @@ training:
       - weights
       - momentum
 measurement:
-  output_dir: runs/spectrum/original_implementation
+  output_dir: runs/spectrum/nanogpt_muon_baseline
   capture_dir: ${measurement.output_dir}/captures
   validation: data/fineweb10B/fineweb_val_000000.bin
   measured_updates: null

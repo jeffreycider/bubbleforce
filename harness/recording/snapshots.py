@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,7 +70,7 @@ class Recording:
         if not self.enabled:
             return
         config = self.config
-        root = os.environ.get("CAPTURE_ROOT") or config.get("capture_dir")
+        root = config.get("capture_dir")
         self.writer = CaptureWriter(root or Path(config["output_dir"]) / "recording", run_state.rank)
         use_capture_directory(run_state, self.writer)
         if run_state.rank == 0:

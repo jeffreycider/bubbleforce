@@ -25,7 +25,7 @@ def test_experiment_records_selected_measurements_without_default_restart_checkp
 
 
 def test_explicit_checkpoint_cadence_saves_restart_boundaries():
-    training = prepare_experiment("original_implementation")[0]
+    training = prepare_experiment("nanogpt_muon_baseline")[0]
     training = replace(training, checkpoint=dict(every=500))
     recording = Recording(training.to_training_dict())
     assert recording.checkpoint_steps == set(range(500, 3251, 500)) | {3250}
@@ -37,7 +37,7 @@ def test_all_optimizer_implementations_are_classified():
 
 
 def test_cli_parses_types_and_preserves_equals_in_strings():
-    training, _, world_size = prepare_experiment("original_implementation", [
+    training, _, world_size = prepare_experiment("nanogpt_muon_baseline", [
         "training.seed=1", "training.seed=2", "training.wandb_offline=false",
         "training.run_id=trial=a", "training.stop_step=10", "world_size=2",
     ])
@@ -52,7 +52,7 @@ def test_resume_origin_is_resolved_before_training(tmp_path, monkeypatch):
     checkpoint = tmp_path / "checkpoint_000321"
     checkpoint.mkdir()
     (checkpoint / "COMPLETE.json").write_text(json.dumps(dict(boundary=321)))
-    training, measurement, world_size = prepare_experiment("original_implementation", [
+    training, measurement, world_size = prepare_experiment("nanogpt_muon_baseline", [
         f"training.resume_checkpoint={checkpoint}", "measurement.measured_updates=[321]",
     ])
     received = []
@@ -72,7 +72,7 @@ def test_resume_origin_is_resolved_before_training(tmp_path, monkeypatch):
     ["assemble_grouped_optimizer", "open_training_batches", "restore_checkpoint"],
 ])
 def test_resume_cannot_silently_train_fresh_weights_at_checkpoint_step(names):
-    config = prepare_experiment("original_implementation")[0].to_training_dict()
+    config = prepare_experiment("nanogpt_muon_baseline")[0].to_training_dict()
     config.update(resume_checkpoint="checkpoint_000321", setup=[dict(name=name) for name in names])
     with pytest.raises(ValueError, match="before opening training data"):
         prepare_training(config)
@@ -98,7 +98,7 @@ def test_resume_order_in_experiment_recipes(name):
     }}]}, ValueError, "Invalid learning rate"),
 ])
 def test_training_preparation_rejects_invalid_settings_before_cuda(change, error, message, monkeypatch):
-    training, measurement, world_size = prepare_experiment("original_implementation")
+    training, measurement, world_size = prepare_experiment("nanogpt_muon_baseline")
     config = training.to_training_dict()
     config.update(change)
     monkeypatch.setattr(training, "to_training_dict", lambda: config)
@@ -117,7 +117,7 @@ def test_training_preparation_rejects_invalid_settings_before_cuda(change, error
     (False, "1", ["apply", "verify"]),
 ])
 def test_training_preparation_applies_determinism_before_cuda(configured, environment, expected, monkeypatch):
-    config = prepare_experiment("original_implementation")[0].to_training_dict()
+    config = prepare_experiment("nanogpt_muon_baseline")[0].to_training_dict()
     config["determinism"] = configured
     calls = []
     monkeypatch.setenv("CAPTURE_DETERMINISM", environment)
