@@ -1,6 +1,7 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+import sys
 
 import numpy as np
 import pytest
@@ -106,18 +107,18 @@ def test_load_snapshot_rejects_muonh(tmp_path):
 def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
     config = make_gpt_capture(tmp_path)
-    result = run_analysis(config, update=2, output=config.output_dir / "spectra" / "update_000002")
-    saved = json.loads((config.output_dir / 'spectra' / 'update_000002' / 'measurement_results.json').read_text())
+    result = run_analysis(config, update=2, output=config.output_dir / "bubbleforce" / "2")
+    saved = json.loads((config.output_dir / 'bubbleforce' / '2' / 'measurement_results.json').read_text())
     assert set(saved) == {'update', 'measurements'}
     assert saved['measurements'][0]['tokens'] == result[0]['tokens']
     assert saved['measurements'][0]['readouts'][-1]['eigenvalues'] == result[0]['readouts'][-1]['eigenvalues']
     assert saved['update'] == 2
     assert result[0]['readouts'][-1]['residuals']
-    assert (config.output_dir / 'spectra' / 'update_000002' / 'eigenvalues.csv').read_text().count('\n') >= 2
-    vectors = torch.load(config.output_dir / 'spectra' / 'update_000002' / 'eigenvectors_N2_rank0.pt', weights_only=True)
+    assert (config.output_dir / 'bubbleforce' / '2' / 'eigenvalues.csv').read_text().count('\n') >= 2
+    vectors = torch.load(config.output_dir / 'bubbleforce' / '2' / 'eigenvectors_N2_rank0.pt', weights_only=True)
     assert vectors.ndim == 2 and len(vectors) == 1
     with pytest.raises(FileExistsError, match='new output directory'):
-        run_analysis(config, update=2, output=config.output_dir / "spectra" / "update_000002")
+        run_analysis(config, update=2, output=config.output_dir / "bubbleforce" / "2")
 
 
 def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
@@ -141,7 +142,7 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
     run.run_experiment(None, config, 2)
     assert not list(config.output_dir.rglob('*.yaml'))
     for update in config.measured_updates:
-        output = config.output_dir / 'spectra' / f'update_{update:06d}'
+        output = config.output_dir / 'bubbleforce' / str(update)
         saved = json.loads((output / 'measurement_results.json').read_text())
         assert set(saved) == {'update', 'measurements'}
         assert saved['update'] == update
@@ -183,7 +184,8 @@ def test_measurement_post_init_rejects_invalid_frequency(tmp_path, interval):
 
 
 @pytest.mark.parametrize('reuse_previous_vector', [False, True])
-def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatch, reuse_previous_vector):
+@pytest.mark.parametrize('from_cli', [False, True])
+def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatch, reuse_previous_vector, from_cli):
     config = replace(
         make_gpt_capture(tmp_path), measured_updates=(2, 3),
         warm_start=tmp_path / 'initial_vector', reuse_previous_vector=reuse_previous_vector,
@@ -192,14 +194,20 @@ def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatc
     def record_measurement(shared_config, **arguments):
         calls.append((shared_config, arguments))
     monkeypatch.setattr(analysis, 'run_analysis', record_measurement)
-    analysis.run_measurements(config)
+    if from_cli:
+        config_path = tmp_path / 'measurement.yaml'
+        config_path.write_text(json.dumps(config.to_dict()))
+        monkeypatch.setattr(sys, 'argv', ['run_analysis', str(config_path)])
+        analysis.main()
+    else:
+        analysis.main(config)
     assert len(calls) == 2
     assert calls[0][0] is calls[1][0]
     assert calls[0][0].to_dict() == config.to_dict()
     for index, update in enumerate(config.measured_updates):
         assert calls[index][1] == dict(
-            update=update, output=config.output_dir / 'spectra' / f'update_{update:06d}',
-            warm_start=(config.output_dir / 'spectra' / 'update_000002'
+            update=update, output=config.output_dir / 'bubbleforce' / str(update),
+            warm_start=(config.output_dir / 'bubbleforce' / '2'
                         if index and reuse_previous_vector else config.warm_start),
         )
 
@@ -224,9 +232,9 @@ def test_compute_bubbleforce_without_logging(tmp_path, symmetric):
     validation_batch = load_validation_token_batch(
         config.validation, 2, rank=0, world_size=1, device=torch.device('cpu'), sequence_length=2,
     )
-    measurement, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, validation_batch, 2)
+    readouts, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, validation_batch, 2)
     torch.testing.assert_close(checkpoint.model.state_dict(), weights_before, rtol=0, atol=0)
-    assert measurement['readouts'][-1]['eigenvalues']
+    assert readouts[-1]['eigenvalues']
     assert len(eigenvectors) == 1
     assert not config.output_dir.exists()
 

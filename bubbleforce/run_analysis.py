@@ -14,7 +14,7 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 
-from bubbleforce.analysis.eigensolver import solve_eigenpairs
+from bubbleforce.analysis.eigensolver import EigenpairReadout, solve_eigenpairs
 from bubbleforce.analysis.loss_hessian import LossHessian
 from bubbleforce.analysis.compute_bubbleforce import compute_bubbleforce
 from bubbleforce.analysis.muon_step import compute_optimizer_jvp
@@ -27,8 +27,8 @@ from harness.schedules import learning_rate_factor
 from optimizers.ringed.momentum.config import momentum_scheduler
 from optimizers.ringed.momentum.kernel import HISTORY_LENGTH
 from bubbleforce.logging import (
-    create_measurement_output_directory,
-    save_eigenvector_shards, write_measurement_report,
+    prepare_bubbleforce_output_directory,
+    save_eigenvector_shards, save_bubbleforce_eigenpair_readouts,
 )
 
 
@@ -124,7 +124,7 @@ def compute_bubbleforce_eigenpairs(
     validation_batch: tuple[torch.Tensor, torch.Tensor],
     token_count: int,
     initial_vector: torch.Tensor | None = None,
-) -> tuple[dict, torch.Tensor]:
+) -> tuple[list[EigenpairReadout], torch.Tensor]:
     """Estimate eigenpairs of the saved Muon update's restoring response.
 
     Apply validation loss Hessian products through the normalized Muon
@@ -145,9 +145,8 @@ def compute_bubbleforce_eigenpairs(
             solver draws a starting vector using its configured seed.
 
     Returns:
-        A tuple containing a measurement dictionary and this worker's
-        eigenvector shards. Store the token count and solver readouts in the
-        dictionary. Return the eigenvectors as rows, with dimensions
+        Return the solver readouts and this worker's eigenvector shards.
+        Return the eigenvectors as rows, with dimensions
         (returned_eigenpairs, local_vector_size).
     """
     vector_config = checkpoint.vector_config
@@ -166,8 +165,7 @@ def compute_bubbleforce_eigenpairs(
         )
     finally:
         hessian.clear_program_cache()
-    measurement = dict(tokens=token_count, readouts=readouts)
-    return measurement, eigenvectors
+    return readouts, eigenvectors
 
 
 def run_analysis(
@@ -208,52 +206,47 @@ def run_analysis(
 
         checkpoint = load_checkpoint_for_analysis(config.capture_dir, update, rank, world_size, device)
         initial_vector = load_initial_eigenvector(warm_start, checkpoint.vector_config)
-        create_measurement_output_directory(output, rank, world_size)
-        measurement_report = dict(update=update, measurements=[])
+        prepare_bubbleforce_output_directory(output, rank, world_size)
+        per_update_bubbleforce_measurements = dict(update=update, measurements=[])
 
         for token_count in config.token_counts:
             validation_batch = load_validation_token_batch(
                 config.validation, token_count, rank=rank, world_size=world_size,
                 device=device, sequence_length=config.sequence_length,
             )
-            measurement, eigenvectors = compute_bubbleforce_eigenpairs(
+            readouts, eigenvectors = compute_bubbleforce_eigenpairs(
                 config, checkpoint, validation_batch, token_count, initial_vector,
             )
-            measurement_report["measurements"].append(measurement)
+            per_update_bubbleforce_measurements["measurements"].append(
+                dict(tokens=token_count, readouts=readouts),
+            )
             save_eigenvector_shards(output, token_count, rank, eigenvectors)
             initial_vector = (
                 eigenvectors[0].clone() if config.reuse_previous_vector and len(eigenvectors) else None
             )
             if rank == 0:
-                write_measurement_report(output, measurement_report)
+                save_bubbleforce_eigenpair_readouts(output, per_update_bubbleforce_measurements)
 
         if world_size > 1:
             dist.barrier()
-        return measurement_report["measurements"]
+        return per_update_bubbleforce_measurements["measurements"]
 
 
-def run_measurements(config: MeasurementConfig) -> None:
-    """Measure selected updates and save their reports in separate directories.
+def main(config: MeasurementConfig | None = None) -> None:
+    """Load settings if needed, then measure and save each selected update."""
+    if config is None:
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("config", type=Path, help="YAML file containing measurement settings")
+        args = parser.parse_args()
+        config = MeasurementConfig.from_yaml(args.config)
 
-    Args:
-        config: Measurement settings containing the selected updates, output
-            directory, optional starting-vector directory, and reuse policy.
-    """
     with initialize_analysis_process_group(config):
         warm_start = config.warm_start
         for update in config.measured_updates:
-            output = config.output_dir / "spectra" / f"update_{update:06d}"
+            output = config.output_dir / "bubbleforce" / str(update)
             run_analysis(config, update=update, output=output, warm_start=warm_start)
             if config.reuse_previous_vector:
                 warm_start = output
-
-
-def main() -> None:
-    """Parse a measurement YAML path from the command line and run measurements."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config", type=Path, help="YAML file containing measurement settings")
-    args = parser.parse_args()
-    run_measurements(MeasurementConfig.from_yaml(args.config))
 
 
 if __name__ == "__main__":

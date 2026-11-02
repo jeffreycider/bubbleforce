@@ -276,7 +276,7 @@ def test_run_passes_measurement_config_without_writing_settings(tmp_path, monkey
         return lambda *args: calls.append((worker, args))
     monkeypatch.setattr(run, 'elastic_launch', record_worker)
     launch(config)
-    assert calls == [(run.run_measurements, (config[1],))]
+    assert calls == [(run.run_bubbleforce_analysis, (config[1],))]
     assert list(config[1].output_dir.iterdir()) == []
     with pytest.raises(FileExistsError):
         launch(config)
@@ -428,7 +428,7 @@ def test_training_run_writes_dense_predictions_between_sparse_measurements(tmp_p
     launch(config)
     assert calls == [
         (run.run_training, (config[0], config[1].capture_dir, config[2])),
-        (run.run_measurements, (config[1],)),
+        (run.run_bubbleforce_analysis, (config[1],)),
     ]
     rows = list(csv.DictReader((config[1].output_dir / 'predicted_equilibrium.csv').open()))
     assert [int(row['update']) for row in rows] == [0, 1, 2]

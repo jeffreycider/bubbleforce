@@ -8,12 +8,15 @@ digraph architecture {
         arrowsize=0.7];
 
   runner [label="run_experiment()", URL="../run.py#L117"];
-  train [label="run_training()", URL="../run.py#L182"];
-  analysis [ordering=out, label="run_analysis()\nLoad a saved update", URL="../bubbleforce/run_analysis.py#L206"];
-  prepare [label="compute_bubbleforce_eigenpairs()\nFind operator Jacobian\neigenvalues and eigenvectors", URL="../bubbleforce/run_analysis.py#L151"];
-  boundary [label="predict_bubbleforce()\nFrom training settings,\npredict bubbleforce ζ", URL="../bubbleforce/run_analysis.py#L77"];
+  train [label="run_training()", URL="../run.py#L187"];
+  measurement_main [label="run_analysis.main()\nLoop over selected updates\nReuse vectors when enabled", URL="../bubbleforce/run_analysis.py#L235"];
+  analysis [ordering=out, label="run_analysis()\nLoad a saved update\nLoop over validation token counts", URL="../bubbleforce/run_analysis.py#L171"];
+  prepare [label="compute_bubbleforce_eigenpairs()\nEstimate response eigenpairs", URL="../bubbleforce/run_analysis.py#L121"];
+  boundary [label="predict_bubbleforce()\nApply the single Muon group's\nschedules at each update", URL="../bubbleforce/run_analysis.py#L75"];
+  boundary_solver [label="compute_bubbleforce()\nFind the frozen-kernel\nstability boundary", URL="../bubbleforce/analysis/compute_bubbleforce.py#L40"];
   prediction_writer [label="save_predicted_bubbleforce()\nCalculate and save predictions", URL="../run.py#L161"];
   prediction_csv [label="predicted_equilibrium.csv\npredicted_zeta = bubbleforce ζ\nColumns: update, predicted_zeta"];
+  saved_readouts [label="save_bubbleforce_eigenpair_readouts()\nsave_eigenvector_shards()\nSave under bubbleforce/<update>/", URL="../bubbleforce/logging.py#L34"];
 
   train_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FEF3C7", color="#A16207",
                 label="TrainConfig", fontsize=11, URL="../configs/train_config.py#L55"];
@@ -23,18 +26,22 @@ digraph architecture {
               label="Measurement\nCheckpoint", fontsize=11, URL="../bubbleforce/load_checkpoint.py#L21"];
 
   { rank=same; train_config; runner; measurement_config; }
-  { rank=same; train; analysis; }
+  { rank=same; train; measurement_main; prediction_writer; }
   train_config -> runner [ style=dotted, label="training settings"];
   runner -> measurement_config [dir=back, style=dotted, label="measurement settings"];
-  runner -> train [label="optional training"];
-  runner -> analysis [ordering=out, label="via run_measurements()"];
-  train -> analysis [style=dashed, label="saved snapshots", constraint=false];
+  runner -> train [label="optional\ntraining"];
+  runner -> prediction_writer [label="predict from current\nor saved training settings"];
+  runner -> measurement_main [label="launch\nworkers"];
+  measurement_main -> analysis [label="each selected\nupdate"];
+  train -> analysis [style=dashed, label="saved\nsnapshots", constraint=false];
   checkpoint -> prepare [style=dotted, label="saved model and momentum"];
-  analysis -> prepare [label="MeasurementConfig"];
-  analysis -> boundary [label="TrainConfig settings from saved recipe\nvia predict_bubbleforce()"];
-  boundary -> prediction_writer [label="run.py: full schedule rows"];
-  prediction_writer -> prediction_csv;
-  { rank=same; checkpoint; prepare; boundary; prediction_writer; }
+  analysis -> prepare [label="each token count"];
+  analysis -> saved_readouts [label="after each solve", style=dashed];
+  prediction_writer -> boundary [label="calculate rows"];
+  boundary -> boundary_solver [label="kernel and decay step"];
+  prediction_writer -> prediction_csv [label="save rows"];
+  { rank=same; analysis; boundary; prediction_csv; }
+  { rank=same; checkpoint; prepare; boundary_solver; saved_readouts; }
 
   subgraph cluster_solver {
     return_mid;
@@ -45,7 +52,7 @@ digraph architecture {
                    label="ShardedVector\nConfig", fontsize=11, URL="../configs/measurement_config.py#L82"];
     eigen_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FFE4E6", color="#BE123C",
                   label="EigenSolve\nConfig", fontsize=11, URL="../configs/measurement_config.py#L14"];
-    solve [label="solve_eigenpairs()", URL="../bubbleforce/analysis/eigensolver.py#L305"];
+    solve [label="solve_eigenpairs()", URL="../bubbleforce/analysis/eigensolver.py#L304"];
     extend [label="extend_krylov_basis()\nApply response to each basis vector", URL="../bubbleforce/analysis/krylov.py#L127"];
     small [label="solve_hessenberg_eigenpairs()\nSolve the small projected problem", URL="../bubbleforce/analysis/krylov.py#L217"];
     result [shape=ellipse, style=filled, fillcolor="#F1F5F9", color="#64748B",

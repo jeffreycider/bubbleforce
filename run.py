@@ -18,7 +18,7 @@ import torch
 import torch.distributed as dist
 from torch.distributed.launcher.api import LaunchConfig, elastic_launch
 
-from bubbleforce.run_analysis import predict_bubbleforce, run_measurements
+from bubbleforce.run_analysis import main as run_bubbleforce_analysis, predict_bubbleforce
 from harness import loop
 from harness.checkpoint import training_config_fingerprint
 from harness.hooks import prepare_training
@@ -155,7 +155,7 @@ def run_experiment(
         training_config, capture_dir=measurement_config.capture_dir,
         output_dir=measurement_config.output_dir,
     )
-    elastic_launch(distributed_launch_config, run_measurements)(measurement_config)
+    elastic_launch(distributed_launch_config, run_bubbleforce_analysis)(measurement_config)
 
 
 def save_predicted_bubbleforce(

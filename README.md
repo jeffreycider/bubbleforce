@@ -79,6 +79,8 @@ The runner calls `predict_bubbleforce` for the single Muon group at every traini
 
 For a nonpositive learning rate or current-gradient weight, the runner leaves `predicted_zeta` blank. If the kernel calculation fails, it raises an error.
 
+For each measured update, the runner saves eigenvalues, solver readouts, and eigenvector files under `<output_dir>/bubbleforce/<update>/`. For example, update 2025 is saved in `<output_dir>/bubbleforce/2025/`. It saves `measurement_results.json` and `eigenvalues.csv` after each validation token-count solve.
+
 ## Restart training from a checkpoint
 
 You may resume training from a later step by [downloading a restart checkpoint](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/restarts), and setting `training.resume_checkpoint` to its local checkpoint directory.
@@ -140,4 +142,8 @@ This loads the snapshot for measurement. For snapshots from your own run, point 
 
 ![Software architecture diagram](figures/architecture.svg)
 
-Edit the diagram in [architecture.excalidraw](architecture.excalidraw).
+Edit [figures/architecture.dot](figures/architecture.dot), then regenerate the SVG with Graphviz:
+
+```bash
+dot -Tsvg figures/architecture.dot -o figures/architecture.svg
+```

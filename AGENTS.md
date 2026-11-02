@@ -275,7 +275,7 @@ Predicted ζ (no model needed):
   training/train.log                          training and validation loss
   captures/                                   snapshots and checkpoints (see above)
   predicted_equilibrium.csv                   predicted ζ for the single Muon group at every update
-  spectra/update_<UUUUUU>/
+  bubbleforce/<update>/
     measurement_results.json                  measurements saved after each token-count solve
     eigenvalues.csv                           one row per (tokens, mode)
     eigenvectors_N<tokens>_rank<R>.pt         eigenvector shards

@@ -9,7 +9,7 @@ import torch
 import torch.distributed as dist
 
 
-def serialize_measurement_value(value):
+def serialize_eigenpair_readout_value(value):
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, Enum):
@@ -17,7 +17,7 @@ def serialize_measurement_value(value):
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 
-def create_measurement_output_directory(output: Path, rank: int, world_size: int) -> None:
+def prepare_bubbleforce_output_directory(output: Path, rank: int, world_size: int) -> None:
     """Create a new directory on rank zero and share any failure with workers."""
     errors = [None]
     if rank == 0:
@@ -31,11 +31,11 @@ def create_measurement_output_directory(output: Path, rank: int, world_size: int
         raise FileExistsError(errors[0])
 
 
-def write_measurement_report(output: Path, measurement_report: dict) -> None:
-    """Save completed measurements as JSON and write their final eigenpairs to CSV."""
+def save_bubbleforce_eigenpair_readouts(output: Path, bubbleforce_eigenpair_readouts_at_update: dict) -> None:
+    """Save an update's solver readouts as JSON and its final eigenpairs as CSV."""
     temporary = output / "measurement_results.json.tmp"
     temporary.write_text(json.dumps(
-        measurement_report, indent=2, default=serialize_measurement_value, allow_nan=False,
+        bubbleforce_eigenpair_readouts_at_update, indent=2, default=serialize_eigenpair_readout_value, allow_nan=False,
     ) + "\n")
     temporary.replace(output / "measurement_results.json")
     with (output / "eigenvalues.csv").open("w", newline="") as stream:
@@ -43,13 +43,14 @@ def write_measurement_report(output: Path, measurement_report: dict) -> None:
             "update", "tokens", "mode", "eigenvalue", "residual", "stopping_reason",
         ))
         writer.writeheader()
-        for measurement in measurement_report["measurements"]:
-            final_readout = measurement["readouts"][-1]
+        for token_count_readouts in bubbleforce_eigenpair_readouts_at_update["measurements"]:
+            final_readout = token_count_readouts["readouts"][-1]
             for mode, (eigenvalue, residual) in enumerate(zip(
                 final_readout["eigenvalues"], final_readout["residuals"], strict=True,
             ), 1):
                 writer.writerow(dict(
-                    update=measurement_report["update"], tokens=measurement["tokens"], mode=mode,
+                    update=bubbleforce_eigenpair_readouts_at_update["update"],
+                    tokens=token_count_readouts["tokens"], mode=mode,
                     eigenvalue=eigenvalue, residual=residual,
                     stopping_reason=final_readout["stopping_reason"].value,
                 ))
