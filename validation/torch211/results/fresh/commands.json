@@ -1,0 +1,99 @@
+[
+  {
+    "name": "prefix",
+    "command": [
+      "/workspace/train-env/bin/python",
+      "run.py",
+      "original_implementation",
+      "world_size=2",
+      "training.train_steps=6",
+      "training.batch_tokens=4096",
+      "training.microbatch_sequences=1",
+      "training.val_tokens=2048",
+      "training.model.num_layers=2",
+      "training.model.model_dim=128",
+      "training.checkpoint.every=3",
+      "measurement.token_counts=[2048]",
+      "measurement.microbatch_sequences=1",
+      "measurement.cpu_threads=4",
+      "measurement.eigensolver.krylov_basis_vector_counts=[4,8,16]",
+      "training.stop_step=3",
+      "measurement.updates=[2]",
+      "measurement.output_dir=/workspace/validation211/fresh/prefix"
+    ],
+    "started": 1793496512.8884683,
+    "returncode": 0,
+    "seconds": 93.39652276039124
+  },
+  {
+    "name": "resumed",
+    "command": [
+      "/workspace/train-env/bin/python",
+      "run.py",
+      "original_implementation",
+      "world_size=2",
+      "training.train_steps=6",
+      "training.batch_tokens=4096",
+      "training.microbatch_sequences=1",
+      "training.val_tokens=2048",
+      "training.model.num_layers=2",
+      "training.model.model_dim=128",
+      "training.checkpoint.every=3",
+      "measurement.token_counts=[2048]",
+      "measurement.microbatch_sequences=1",
+      "measurement.cpu_threads=4",
+      "measurement.eigensolver.krylov_basis_vector_counts=[4,8,16]",
+      "training.resume_checkpoint=/workspace/validation211/fresh/prefix/captures/checkpoint_000003",
+      "measurement.updates=[5]",
+      "measurement.output_dir=/workspace/validation211/fresh/resumed"
+    ],
+    "started": 1793496606.2857013,
+    "returncode": 0,
+    "seconds": 30.035523891448975
+  },
+  {
+    "name": "uninterrupted",
+    "command": [
+      "/workspace/train-env/bin/python",
+      "run.py",
+      "original_implementation",
+      "world_size=2",
+      "training.train_steps=6",
+      "training.batch_tokens=4096",
+      "training.microbatch_sequences=1",
+      "training.val_tokens=2048",
+      "training.model.num_layers=2",
+      "training.model.model_dim=128",
+      "training.checkpoint.every=3",
+      "measurement.token_counts=[2048]",
+      "measurement.microbatch_sequences=1",
+      "measurement.cpu_threads=4",
+      "measurement.eigensolver.krylov_basis_vector_counts=[4,8,16]",
+      "measurement.updates=[5]",
+      "measurement.output_dir=/workspace/validation211/fresh/uninterrupted"
+    ],
+    "started": 1793496636.3216443,
+    "returncode": 0,
+    "seconds": 29.535969018936157
+  },
+  {
+    "name": "snapshot_only",
+    "command": [
+      "/workspace/train-env/bin/python",
+      "run.py",
+      "original_implementation",
+      "world_size=2",
+      "training=null",
+      "measurement.updates=[5]",
+      "measurement.token_counts=[2048]",
+      "measurement.microbatch_sequences=1",
+      "measurement.cpu_threads=4",
+      "measurement.eigensolver.krylov_basis_vector_counts=[4,8,16]",
+      "measurement.capture_dir=/workspace/validation211/fresh/resumed/captures",
+      "measurement.output_dir=/workspace/validation211/fresh/snapshot_only"
+    ],
+    "started": 1793496665.858349,
+    "returncode": 0,
+    "seconds": 17.506404161453247
+  }
+]

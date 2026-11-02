@@ -1,0 +1,18 @@
+{
+  "torch": "2.11.0+cu128",
+  "mix_order_reduction": true,
+  "checks": [
+    {
+      "name": "column_sum",
+      "finite": true,
+      "max_error": 0.0,
+      "relative_l2": 0.0
+    },
+    {
+      "name": "row_sum",
+      "finite": true,
+      "max_error": 0.0001220703125,
+      "relative_l2": 5.17249461040592e-08
+    }
+  ]
+}

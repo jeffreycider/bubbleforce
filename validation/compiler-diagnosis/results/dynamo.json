@@ -1,0 +1,83 @@
+{
+  "settings": {
+    "backend": "eager",
+    "rank": 0,
+    "microbatch": -1,
+    "tag": "dynamo",
+    "variant": "default"
+  },
+  "rows": [
+    {
+      "microbatch": 0,
+      "loss": 28016.50390625,
+      "seconds": 1.4480018615722656,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 5.96875
+    },
+    {
+      "microbatch": 1,
+      "loss": 26689.6875,
+      "seconds": 0.06170964241027832,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 8.78125
+    },
+    {
+      "microbatch": 2,
+      "loss": 27578.640625,
+      "seconds": 0.061588287353515625,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 13.125
+    },
+    {
+      "microbatch": 3,
+      "loss": 29623.013671875,
+      "seconds": 0.061285972595214844,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 17.78125
+    },
+    {
+      "microbatch": 4,
+      "loss": 29145.109375,
+      "seconds": 0.0615386962890625,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 20.375
+    },
+    {
+      "microbatch": 5,
+      "loss": 32341.25390625,
+      "seconds": 0.06169772148132324,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 26.125
+    },
+    {
+      "microbatch": 6,
+      "loss": 46227.890625,
+      "seconds": 0.06170797348022461,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 26.828125
+    },
+    {
+      "microbatch": 7,
+      "loss": 34617.859375,
+      "seconds": 0.06163954734802246,
+      "nonfinite": [],
+      "bias_nan": 0,
+      "bias_inf": 0,
+      "bias_max": 36.453125
+    }
+  ]
+}

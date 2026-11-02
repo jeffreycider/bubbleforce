@@ -117,7 +117,7 @@ Here's how to resume training from a restart checkpoint:
      training.train_steps=6475 \
      training.microbatch_sequences=8 \
      training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
-     'measurement.updates=[2210]' \
+     'measurement.measured_updates=[2210]' \
      measurement.output_dir=runs/spectrum/decreased_momentum_restart
    ```
 
@@ -180,7 +180,7 @@ Set `training=null`, as to not kick off a new run, then simply pass in the downl
 python run.py decreased_momentum \
   training=null \
   measurement.capture_dir=./decreased_momentum__update_002025 \
-  'measurement.updates=[2025]' \
+  'measurement.measured_updates=[2025]' \
   measurement.output_dir=runs/spectrum/decreased_momentum_snapshot2025
 ```
 
@@ -205,7 +205,7 @@ To run `python run.py EXPERIMENT key=value ...`, the experiment name is required
 - `training.seed` [`int`, default: `0`]: Change the model initialization seed. The trainer adds the configured seed offset before initializing parameters.
 - `training.microbatch_sequences` [`int`, default: `64`]: Process this many 1024-token sequences per GPU at a time. Reduce it to save memory; it must divide the local sequence count.
 - `measurement.measure_every` [`int`, default: `50`]: Measure every this many training updates, including update `0` and the final update.
-- `measurement.updates` [`list[int]` or `null`, default: `null`]: Measure specific updates instead of using the interval above. Unless `training.stop_step` is set, training stops after the last selected update.
+- `measurement.measured_updates` [`list[int]` or `null`, default: `null`]: Measure specific updates instead of using the interval above. Unless `training.stop_step` is set, training stops after the last selected update.
 - `measurement.token_counts` [`list[int]`, default: `[16777216]`]: Calculate eigenvalues using each requested number of validation tokens across all GPUs. Supply positive, distinct, increasing counts divisible by `world_size * measurement.sequence_length`.
 - `measurement.microbatch_sequences` [`int`, default: `16`]: Process this many validation sequences per GPU at a time during measurement. Reduce it to save memory.
 - `measurement.eigensolver.num_requested_eigenpairs` [`int`, default: `1`]: Estimate this many leading positive real eigenvalues and their eigenvectors.
@@ -223,3 +223,7 @@ Start with `run.py` to follow an experiment from configuration through training 
 | bubbleforce/run_analysis.py | Loads saved snapshots, runs eigenvalue measurements, and calculates predicted equilibria.                             |
 | bubbleforce/analysis/       | Computes Muon response derivatives, solves for eigenvalues, and calculates bubbleforce stability boundaries.          |
 | tests/                      | Checks numerical calculations, configuration handling, and checkpoint workflows.                                      |
+
+## Model config
+
+![Bubbleforce model configuration](docs/images/model-architecture.png)

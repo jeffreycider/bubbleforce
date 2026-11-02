@@ -85,7 +85,7 @@ measurement:
   output_dir: runs/spectrum/decreased_momentum
   capture_dir: ${measurement.output_dir}/captures
   validation: data/fineweb10B/fineweb_val_000000.bin
-  updates: null
+  measured_updates: null
   token_counts:
   - 16777216
   microbatch_sequences: 16

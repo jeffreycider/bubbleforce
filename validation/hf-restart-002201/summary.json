@@ -1,0 +1,50 @@
+{
+  "checkpoint_hashes_verified": 8,
+  "initial_weights_exact": true,
+  "source_optimizer_tensors_finite": true,
+  "compiled_restart": {
+    "passed": false,
+    "completed_updates": 1,
+    "failure": "non-finite training loss on second update",
+    "first_nonfinite_gradient": "blocks.0.attn.proj.bias"
+  },
+  "eager_control": {
+    "passed": true,
+    "completed_updates": 2,
+    "parameters_finite_after_both_updates": true,
+    "change": "Disable GPT.compile only in the diagnostic worker"
+  },
+  "snapshot_measurement": {
+    "passed": true,
+    "update": 2201,
+    "tokens": 8192,
+    "world_size": 8,
+    "readout": {
+      "num_krylov_basis_vectors": 8,
+      "eigenvalues": [
+        1947.60521965559
+      ],
+      "seed": 921,
+      "stopping_reason": "budget",
+      "residuals": [
+        0.007144560912097201
+      ]
+    },
+    "eigenvector_norm_squared": 0.9999999310329355
+  },
+  "environment": {
+    "python": "3.12.3",
+    "torch": "2.10.0+cu128",
+    "cuda": "12.8",
+    "gpus": [
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 80GB HBM3"
+    ]
+  }
+}

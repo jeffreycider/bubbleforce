@@ -20,11 +20,9 @@ from torch.distributed.launcher.api import LaunchConfig, elastic_launch
 
 from bubbleforce.logging import write_predicted_equilibrium
 from bubbleforce.run_analysis import predict_equilibrium, run_measurements
-from harness import determinism_policy, loop
+from harness import loop
 from harness.checkpoint import training_config_fingerprint
-from harness.hooks import bind_sites
-from harness.optimizers import check_optimizer_groups_resolve
-from harness.recording.snapshots import Recording
+from harness.hooks import prepare_training
 from harness.recording.store import get_formatted_path_to_capture_file
 from configs.measurement_config import MeasurementConfig
 from configs.train_config import TrainConfig
@@ -67,9 +65,9 @@ def prepare_experiment(
     )
     check_experiment_config(experiment_config, training_config, measurement_config)
     if training_config is not None:
-        if experiment_config["measurement"]["updates"] is not None and training_config.stop_step is None:
-            training_config.stop_step = measurement_config.updates[-1] + 1
-        training_config.metrics_snapshot["steps"] = list(measurement_config.updates)
+        if experiment_config["measurement"]["measured_updates"] is not None and training_config.stop_step is None:
+            training_config.stop_step = measurement_config.measured_updates[-1] + 1
+        training_config.metrics_snapshot["steps"] = list(measurement_config.measured_updates)
     return training_config, measurement_config, experiment_config["world_size"]
 
 
@@ -92,7 +90,7 @@ def check_experiment_config(
     world_size = experiment_config["world_size"]
     if type(world_size) is not int or world_size < 1:
         raise ValueError("world_size must be a positive integer")
-    if training_config is not None and measurement_config.updates[-1] >= (training_config.stop_step or training_config.train_steps):
+    if training_config is not None and measurement_config.measured_updates[-1] >= (training_config.stop_step or training_config.train_steps):
         raise ValueError("measurement updates must precede stop_step and train_steps")
     if any(token_count % (world_size * measurement_config.sequence_length) for token_count in measurement_config.token_counts):
         raise ValueError("token_counts must provide whole validation sequences on every rank")
@@ -121,8 +119,8 @@ def check_experiment_checkpoint_config(
     )
     if checkpoint_metadata.get("format") != 3 or checkpoint_metadata["world_size"] != world_size:
         raise ValueError("resume requires a schema-3 bundle with the selected process count")
-    if measurement_config.updates[0] < checkpoint_metadata["boundary"]:
-        raise ValueError("requested updates precede the restart; select later measurement.updates")
+    if measurement_config.measured_updates[0] < checkpoint_metadata["boundary"]:
+        raise ValueError("requested updates precede the restart; select later measurement.measured_updates")
     if checkpoint_metadata["protocol_sha256"] != training_config_fingerprint(training_settings):
         raise ValueError("restart recipe differs; use a checkpoint created with this experiment's training recipe")
 
@@ -146,7 +144,7 @@ def run_experiment(
         if not glob.glob(str(repository_root / training_config.train_data)):
             raise FileNotFoundError(f"training shards missing: {training_config.train_data}")
     else:
-        for measurement_update in measurement_config.updates:
+        for measurement_update in measurement_config.measured_updates:
             for worker_rank in range(world_size):
                 snapshot_path = get_formatted_path_to_capture_file(
                     measurement_config.capture_dir, worker_rank, "metrics_snapshot", measurement_update,
@@ -202,20 +200,7 @@ def run_training(training_config: TrainConfig, capture_dir: Path, world_size: in
     if training_settings.get("resume_checkpoint"):
         checkpoint_metadata_path = Path(training_settings["resume_checkpoint"]) / "COMPLETE.json"
         training_settings["start_step"] = json.loads(checkpoint_metadata_path.read_text())["boundary"]
-    if training_settings.get("loop") != "gpt_record":
-        raise SystemExit("this runner requires loop: gpt_record")
-    check_optimizer_groups_resolve(training_settings)
-    if any(
-        setting_name in training_settings
-        for setting_name in ("capture", "resume_anchor", "checkpoint_every", "checkpoint_dir")
-    ):
-        raise ValueError("use metrics_snapshot, checkpoint, capture_dir and resume_checkpoint")
-    training_hooks = bind_sites(training_settings)
-    training_recording = Recording(training_settings)  # resolve both policies once, before CUDA
-
-    if training_settings.get("determinism") or os.environ.get("CAPTURE_DETERMINISM") == "1":
-        determinism_policy.apply()
-        determinism_policy.verify(require_launch_env=True)
+    training_hooks, training_recording = prepare_training(training_settings)
 
     worker_device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
     torch.cuda.set_device(worker_device)

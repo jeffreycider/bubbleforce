@@ -61,7 +61,7 @@ def bundle(tmp_path, steps=4):
 
 
 def test_experiment_records_requested_updates_with_its_optimizer_settings():
-    training, measurement, world_size = prepare_experiment("maxentslop", ["measurement.updates=[10,11,12]"])
+    training, measurement, world_size = prepare_experiment("maxentslop", ["measurement.measured_updates=[10,11,12]"])
     config = dict(training.to_training_dict(), capture_dir=str(measurement.capture_dir),
                   require_world_size=world_size)
     assert config["require_world_size"] == 8
@@ -603,7 +603,7 @@ def test_shared_loop_runs_capture_and_checkpoint(tmp_path, monkeypatch):
     from harness import hooks as lifecycle, loop
 
     cfg = configuration(tmp_path / "capture")
-    cfg.update(require_world_size=1, microbatch_sequences=1)
+    cfg.update(loop="gpt_record", require_world_size=1, microbatch_sequences=1)
     holder = {}
 
     class LossModel(Model):
@@ -621,13 +621,9 @@ def test_shared_loop_runs_capture_and_checkpoint(tmp_path, monkeypatch):
 
         return setup
 
-    old = lifecycle.hook_factories
-    monkeypatch.setattr(
-        lifecycle,
-        "hook_factories",
-        lambda: dict(old(), cpu_fixture_setup=fixture_setup),
-    )
-    cfg["setup"] = [dict(name="cpu_fixture_setup")]
+    monkeypatch.setattr(lifecycle, "build_compiled_gpt", fixture_setup)
+    cfg["setup"] = [dict(name="build_compiled_gpt")]
+    hooks, recording = lifecycle.prepare_training(cfg)
     dist.init_process_group(
         "gloo",
         init_method="file://" + str(tmp_path / "rendezvous"),
@@ -635,7 +631,7 @@ def test_shared_loop_runs_capture_and_checkpoint(tmp_path, monkeypatch):
         world_size=1,
     )
     try:
-        loop.run(cfg, lifecycle.bind_sites(cfg), Recording(cfg))
+        loop.run(cfg, hooks, recording)
         assert holder["state"].step == 3
         assert (tmp_path / "capture/checkpoint_000004/COMPLETE.json").is_file()
     finally:

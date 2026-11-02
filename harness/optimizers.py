@@ -104,11 +104,3 @@ class GroupedOptimizers:
         """Restore through the owning optimizer; PyTorch checks group sizes."""
         for (_, optimizer), entry in zip(self.groups, optimizer_state_dict["optimizers"], strict=True):
             optimizer.load_state_dict(entry)
-
-def check_optimizer_groups_resolve(config: dict[str, Any]) -> None:
-    """Preflight the selected factory on meta matrices, before CUDA setup."""
-    for row in config['optimizer_groups']:
-        re.compile(row['pattern'])
-        parameter = torch.nn.Parameter(torch.empty(2, 2, device='meta'))
-        optimizer_registry[row['optimizer']]([('blocks.0.mlp.fc.weight', parameter)],
-                                             **row.get('hyperparams', {}))

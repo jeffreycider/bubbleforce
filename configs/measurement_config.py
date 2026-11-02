@@ -168,7 +168,7 @@ class MeasurementConfig:
     validation: Path
     output_dir: Path
     capture_dir: Path
-    updates: tuple[int, ...] | None
+    measured_updates: tuple[int, ...] | None
     measure_every: int
     token_counts: tuple[int, ...]
     microbatch_sequences: int
@@ -190,17 +190,17 @@ class MeasurementConfig:
                 setattr(self, name, (repository / value).resolve())
         if type(self.measure_every) is not int or self.measure_every < 1:
             raise ValueError("measure_every must be a positive integer")
-        if self.updates is None:
+        if self.measured_updates is None:
             if end_step is None:
-                raise ValueError("measurement-only runs require explicit measurement.updates")
+                raise ValueError("measurement-only runs require explicit measurement.measured_updates")
             if type(end_step) is not int or end_step < 1:
                 raise ValueError("end_step must be a positive integer")
-            self.updates = tuple(sorted(set(range(0, end_step, self.measure_every)) | {end_step - 1}))
-        if (not self.updates
-                or any(type(update) is not int or update < 0 for update in self.updates)
-                or len(self.updates) != len(set(self.updates))):
-            raise ValueError("updates must be nonnegative, distinct integers")
-        self.updates = tuple(sorted(self.updates))
+            self.measured_updates = tuple(sorted(set(range(0, end_step, self.measure_every)) | {end_step - 1}))
+        if (not self.measured_updates
+                or any(type(update) is not int or update < 0 for update in self.measured_updates)
+                or len(self.measured_updates) != len(set(self.measured_updates))):
+            raise ValueError("measured_updates must be nonnegative, distinct integers")
+        self.measured_updates = tuple(sorted(self.measured_updates))
         self.token_counts = tuple(self.token_counts)
         for name in ("microbatch_sequences", "sequence_length", "cpu_threads"):
             if type(getattr(self, name)) is not int or getattr(self, name) < 1:
@@ -231,7 +231,7 @@ class MeasurementConfig:
             if values[name] is not None:
                 values[name] = str(values[name])
         values["token_counts"] = list(self.token_counts)
-        values["updates"] = list(self.updates)
+        values["measured_updates"] = list(self.measured_updates)
         values["eigensolver"]["krylov_basis_vector_counts"] = list(
             self.eigensolver.krylov_basis_vector_counts,
         )

@@ -1,0 +1,253 @@
+{
+  "format": 1,
+  "stage": "complete",
+  "update": 2,
+  "output": "/workspace/validation211/fresh/prefix/spectra/update_000002",
+  "warm_start": null,
+  "operator": "restoring-response",
+  "operator_definition": "-D[(W_next-W)/eta], older gradients and Adam frozen",
+  "world_size": 2,
+  "source_revision": null,
+  "source_dirty": null,
+  "inputs": [
+    {
+      "path": "/workspace/validation211/fresh/prefix/captures/rank0/metrics_snapshot_000002.pt",
+      "sha256": "c2123d1e3eb181c726998de4d7394d74205bf1dc3bb20484edd36478255edc04"
+    },
+    {
+      "path": "/workspace/validation211/fresh/prefix/captures/rank1/metrics_snapshot_000002.pt",
+      "sha256": "02e5378ae6e16ce6890f2b3b030a2b4e0049881abc854cf401534389236bc7e6"
+    },
+    {
+      "path": "/workspace/bubbleforce/data/fineweb10B/fineweb_val_000000.bin",
+      "sha256": "5b95c8e0966f0861685b307b23dc5ae42b228ef74b28cb499784ae021f201640"
+    },
+    {
+      "path": "/workspace/validation211/fresh/prefix/captures/capture_config.json",
+      "sha256": "2b21624613f2cbdcd3c7af04ef3f9f21679fa524073f1afdbd986316fc6ca2f1"
+    }
+  ],
+  "optimizer_step_configs": {
+    "blocks.0.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.0.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.0.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.0.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.0.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.0.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    },
+    "blocks.1.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "training_batch_tokens": 4096
+    }
+  },
+  "matrix_layouts": [
+    [
+      [
+        "blocks.0.attn.q.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.0.attn.v.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.0.mlp.fc.weight",
+        [
+          512,
+          128
+        ]
+      ],
+      [
+        "blocks.0.mlp.proj.weight",
+        [
+          128,
+          512
+        ]
+      ],
+      [
+        "blocks.1.attn.q.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.1.attn.v.weight",
+        [
+          128,
+          128
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.0.attn.k.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.0.attn.proj.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.1.attn.k.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.1.attn.proj.weight",
+        [
+          128,
+          128
+        ]
+      ],
+      [
+        "blocks.1.mlp.fc.weight",
+        [
+          512,
+          128
+        ]
+      ],
+      [
+        "blocks.1.mlp.proj.weight",
+        [
+          128,
+          512
+        ]
+      ]
+    ]
+  ],
+  "stability": [
+    {
+      "update": 2,
+      "parameter_group": "^blocks\\..*\\.weight$",
+      "learning_rate": 0.023809523809523815,
+      "weight_decay": 0.05,
+      "decay_step": 0.0011904761904761908,
+      "current_gradient_coefficient": 0.09749999642372131,
+      "predicted_zeta": 85.98871165251118,
+      "curvature_coupling_boundary": 20.986255141568858,
+      "bubble_pressure": 2.047350277440743
+    }
+  ],
+  "measurements": [
+    {
+      "tokens": 2048,
+      "readouts": [
+        {
+          "num_krylov_basis_vectors": 4,
+          "eigenvalues": [
+            133.33018336328323
+          ],
+          "seed": 921,
+          "stopping_reason": null
+        },
+        {
+          "num_krylov_basis_vectors": 8,
+          "eigenvalues": [
+            152.32452687713032
+          ],
+          "seed": 921,
+          "stopping_reason": null
+        },
+        {
+          "num_krylov_basis_vectors": 16,
+          "eigenvalues": [
+            156.77897259230306
+          ],
+          "seed": 921,
+          "stopping_reason": "budget",
+          "residuals": [
+            0.0028962974924905205
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -82,7 +82,7 @@ def compute_muon_response(
     hessian: LossHessian,
     weights: Mapping[str, torch.Tensor],
     momenta: Mapping[str, torch.Tensor],
-    config: Mapping[str, MuonStepConfig],
+    muon_step_config: Mapping[str, MuonStepConfig],
     direction_shard: torch.Tensor,
 ) -> torch.Tensor:
     """Compute the Muon update's response across weight matrices.
@@ -104,7 +104,7 @@ def compute_muon_response(
     return pack_tensor(
         {
             name: compute_negative_update_jvp(
-                weight, momenta[name], config[name],
+                weight, momenta[name], muon_step_config[name],
                 weight_perturbations[name], gradient_perturbations[name],
             )
             for name, weight in weights.items()

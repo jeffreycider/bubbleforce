@@ -62,7 +62,7 @@ def make_gpt_capture(tmp_path):
     validation = tmp_path / 'validation.bin'
     write_tokens(validation)
     return MeasurementConfig(
-        validation=validation, output_dir=tmp_path / 'result', capture_dir=tmp_path / 'capture', updates=(2,), measure_every=250,
+        validation=validation, output_dir=tmp_path / 'result', capture_dir=tmp_path / 'capture', measured_updates=(2,), measure_every=250,
         token_counts=(2,), microbatch_sequences=1, sequence_length=2,
         hvp_mode='trace', gemm_precision='fp32', matmul_precision='highest', cpu_threads=1,
         warm_start=None, reuse_previous_vector=False,
@@ -72,7 +72,7 @@ def make_gpt_capture(tmp_path):
 
 def test_load_snapshot_recovers_optimizer_and_parameter_assignments(tmp_path):
     config = make_gpt_capture(tmp_path)
-    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
     assert len(checkpoint.momenta) == 6
     assert set(checkpoint.momenta) == set(checkpoint.vector_config.parameter_names)
     assert all(value.current_gradient_coefficient == pytest.approx(.1) for value in checkpoint.step_configs.values())
@@ -80,7 +80,7 @@ def test_load_snapshot_recovers_optimizer_and_parameter_assignments(tmp_path):
         replacement = checkpoint.paths[0].with_suffix('.replacement.pt')
         torch.save(dict(checkpoint.snapshot, update=3), replacement)
         replacement.replace(checkpoint.paths[0])
-        load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+        load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
 
 
 def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
@@ -107,7 +107,7 @@ def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
 
 def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
     config = make_gpt_capture(tmp_path)
-    config = replace(config, token_counts=(4,), updates=(2, 3), reuse_previous_vector=True)
+    config = replace(config, token_counts=(4,), measured_updates=(2, 3), reuse_previous_vector=True)
     path = (tmp_path / 'capture') / 'rank0' / 'metrics_snapshot_000002.pt'
     snapshot = torch.load(path, weights_only=True)
     names = sorted(snapshot['post_insertion_prepolar_momentum'])
@@ -122,10 +122,10 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
         torch.save(owned, folder / 'metrics_snapshot_000002.pt')
         torch.save(dict(owned, update=3), folder / 'metrics_snapshot_000003.pt')
     with pytest.raises(ValueError, match='every hidden matrix'):
-        load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+        load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
     run.run_experiment(None, config, 2)
     assert not list(config.output_dir.rglob('*.yaml'))
-    for update in config.updates:
+    for update in config.measured_updates:
         output = config.output_dir / 'spectra' / f'update_{update:06d}'
         saved = json.loads((output / 'measurement_results.json').read_text())
         assert saved['stage'] == 'complete'
@@ -151,20 +151,20 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
 def test_measurement_config_rejects_invalid_updates(tmp_path, updates):
     config = make_gpt_capture(tmp_path)
     with pytest.raises(ValueError, match='updates must be'):
-        replace(config, updates=updates)
+        replace(config, measured_updates=updates)
 
 
 def test_measurement_post_init_selects_updates_and_resolves_paths(tmp_path, monkeypatch):
     config = make_gpt_capture(tmp_path)
     monkeypatch.chdir(tmp_path)
-    resolved = replace(config, updates=None, measure_every=3, end_step=8,
+    resolved = replace(config, measured_updates=None, measure_every=3, end_step=8,
                        capture_dir='captures', output_dir='results', warm_start='vectors')
     repository = Path(analysis.__file__).resolve().parents[1]
-    assert resolved.updates == (0, 3, 6, 7)
+    assert resolved.measured_updates == (0, 3, 6, 7)
     assert resolved.capture_dir == repository / 'captures'
     assert resolved.output_dir == repository / 'results'
     assert resolved.warm_start == repository / 'vectors'
-    assert replace(config, updates=(3, 2)).updates == (2, 3)
+    assert replace(config, measured_updates=(3, 2)).measured_updates == (2, 3)
 
 
 @pytest.mark.parametrize('interval', [0, -1, True, 1.5])
@@ -177,7 +177,7 @@ def test_measurement_post_init_rejects_invalid_frequency(tmp_path, interval):
 @pytest.mark.parametrize('reuse_previous_vector', [False, True])
 def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatch, reuse_previous_vector):
     config = replace(
-        make_gpt_capture(tmp_path), updates=(2, 3),
+        make_gpt_capture(tmp_path), measured_updates=(2, 3),
         warm_start=tmp_path / 'initial_vector', reuse_previous_vector=reuse_previous_vector,
     )
     calls = []
@@ -188,7 +188,7 @@ def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatc
     assert len(calls) == 2
     assert calls[0][0] is calls[1][0]
     assert calls[0][0].to_dict() == config.to_dict()
-    for index, update in enumerate(config.updates):
+    for index, update in enumerate(config.measured_updates):
         assert calls[index][1] == dict(
             update=update, output=config.output_dir / 'spectra' / f'update_{update:06d}',
             warm_start=(config.output_dir / 'spectra' / 'update_000002'
@@ -208,7 +208,7 @@ def test_compute_bubbleforce_without_logging(tmp_path, symmetric):
 
     config = make_gpt_capture(tmp_path)
     config = replace(config, eigensolver=replace(config.eigensolver, symmetric=symmetric))
-    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
     model = load_model_from_checkpoint(checkpoint)
     validation_batch = load_validation_token_batch(
         config.validation, 2, rank=0, world_size=1, device=torch.device('cpu'), sequence_length=2,

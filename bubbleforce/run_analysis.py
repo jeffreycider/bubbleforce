@@ -1,8 +1,8 @@
-"""Load saved training state and measure its restoring-response spectrum.
+"""Measure restoring-response eigenpairs from saved training snapshots.
 
-Run with torchrun and a measurement YAML path. Use
-run to select a training recipe or measure several
-saved updates.
+Read a measurement YAML file from the command line, load each selected update,
+then save eigenvalue reports and eigenvector shards. Launch with torchrun for
+distributed measurements, or use run.py to train before measuring snapshots.
 """
 
 import argparse
@@ -36,7 +36,23 @@ from bubbleforce.logging import (
 
 @contextmanager
 def initialize_analysis_process_group(config: MeasurementConfig):
-    """Set numerical options, initialize workers, release communication on exit."""
+    """Configure numerical precision and prepare distributed measurement workers.
+
+    Read worker ranks from the launch environment. Use CUDA when available,
+    otherwise use CPU. Reuse an existing process group, or initialize a group
+    for multiple workers. Destroy the group on exit if initialized here.
+
+    Args:
+        config: Measurement settings for validation token counts, sequence
+            length, CPU thread count, and matrix multiplication precision.
+
+    Yields:
+        A tuple containing the global rank, worker count, and torch device.
+
+    Raises:
+        ValueError: A token count cannot be divided into complete validation
+            sequences across all workers.
+    """
     rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
@@ -59,12 +75,30 @@ def initialize_analysis_process_group(config: MeasurementConfig):
 
 
 def predict_equilibrium(training_config: dict, updates=None):
-    """Predict equilibrium at each update from the training schedules.
+    """Calculate equilibrium predictions from scheduled optimizer settings.
 
-    Evaluate the learning-rate and momentum schedules at the absolute update
-    number and truncate the kernel to the available gradient history, as in
-    training. Yield one row per update and Muon parameter group; unsupported
-    rows carry predicted_zeta=None and a reason.
+    Evaluate the learning rate and momentum kernel at each absolute update.
+    Truncate the kernel to the available gradient history, then normalize its
+    weights if requested by the momentum schedule. Calculate the stability
+    boundary using those settings.
+
+    Args:
+        training_config: Resolved training settings containing train_steps,
+            optimizer_groups, and an optional stop_step.
+        updates: Optional iterable of zero-based update indices. If omitted,
+            process updates from zero up to the smaller of stop_step and
+            train_steps, excluding that endpoint.
+
+    Yields:
+        A dictionary for each requested update and Muon or MuonH parameter
+        group. Include the scheduled settings and predicted_zeta. If the
+        prediction is unavailable, set predicted_zeta to None and include
+        a reason.
+
+    Raises:
+        ValueError: An update is not an integer within the training schedule,
+            or the available kernel has nonpositive mass when normalization
+            is requested.
     """
     train_steps = training_config["train_steps"]
     if updates is None:
@@ -124,11 +158,33 @@ def compute_bubbleforce_eigenpairs(
     initial_vector: torch.Tensor | None = None,
     on_solver_readout: Callable[[dict], None] | None = None,
 ) -> tuple[dict, torch.Tensor]:
-    """Apply validation Hessian products through Muon and estimate eigenpairs.
+    """Estimate eigenpairs of the saved Muon update's restoring response.
 
-    Hold older gradients and Adam parameters fixed while differentiating the
-    normalized Muon displacement. Return solver readouts and this rank's
-    eigenvector shards, releasing compiled Hessian programs after the solve.
+    Apply validation loss Hessian products through the normalized Muon
+    displacement while holding older gradients and Adam parameters fixed.
+    Clear cached Hessian programs after solving, including on failure.
+
+    Args:
+        config: Measurement settings for microbatch size, Hessian evaluation,
+            numerical precision, and the eigensolver.
+        checkpoint: Loaded snapshot with momentum tensors, optimizer settings,
+            and parameter assignments for each worker.
+        model: Model loaded with the snapshot's weights and buffers.
+        validation_batch: This worker's input and target token tensors, each
+            with dimensions (local_sequences, sequence_length).
+        token_count: Total validation token count across all workers, used to
+            normalize the loss Hessian.
+        initial_vector: Optional local starting vector with length
+            checkpoint.vector_config.local_vector_size. If omitted, the
+            solver draws a starting vector using its configured seed.
+        on_solver_readout: Optional callback accepting a dictionary of solver
+            estimates at each basis checkpoint.
+
+    Returns:
+        A tuple containing a measurement dictionary and this worker's
+        eigenvector shards. Store the token count and solver readouts in the
+        dictionary. Return the eigenvectors as rows, with dimensions
+        (returned_eigenpairs, local_vector_size).
     """
     vector_config = checkpoint.vector_config
     hessian = LossHessian(
@@ -162,8 +218,35 @@ def run_analysis(
     output: Path,
     warm_start: Path | None = None,
 ) -> list[dict]:
-    """Restore a saved update, measure validation prefixes, save reports and vectors."""
+    """Load a saved update and measure each configured validation prefix.
+
+    Load the model and optimizer state, then estimate eigenpairs for each
+    token count. Save reports on rank zero and eigenvector shards on every
+    worker. If vector reuse is enabled, start each later solve with the first
+    eigenvector from the preceding solve, when available.
+
+    Args:
+        config: Measurement settings for the capture directory, validation
+            data, token counts, and eigensolver.
+        update: Zero-based training update to load from the capture directory.
+        output: Directory to create for this update's reports and vectors.
+        warm_start: Optional directory containing current_vector_rank{rank}.pt
+            files. Use this worker's saved vector for the first token count.
+
+    Returns:
+        Measurement dictionaries in configured token-count order. Include
+        the token count and eigensolver readouts in each dictionary.
+
+    Raises:
+        FileExistsError: The output directory already exists or cannot be
+            created.
+        FileNotFoundError: A required snapshot, validation shard, or supplied
+            starting-vector file is missing.
+        ValueError: Saved state, starting-vector dimensions, or validation
+            data fail the measurement checks.
+    """
     with initialize_analysis_process_group(config) as (rank, world_size, device):
+        
         checkpoint = load_checkpoint_for_analysis(config.capture_dir, update, rank, world_size, device)
         model = load_model_from_checkpoint(checkpoint)
         initial_vector = load_initial_eigenvector(warm_start, checkpoint.vector_config)
@@ -212,10 +295,20 @@ def run_analysis(
 
 
 def run_measurements(config: MeasurementConfig) -> None:
-    """Measure each selected update using the supplied measurement config."""
+    """Measure selected updates and save their reports in separate directories.
+
+    Process config.measured_updates in order. Save each update under
+    config.output_dir / "spectra" / "update_{update:06d}". If vector reuse is
+    enabled, load starting vectors for the next update from the preceding
+    update's output directory.
+
+    Args:
+        config: Measurement settings containing the selected updates, output
+            directory, optional starting-vector directory, and reuse policy.
+    """
     with initialize_analysis_process_group(config):
         warm_start = config.warm_start
-        for update in config.updates:
+        for update in config.measured_updates:
             output = config.output_dir / "spectra" / f"update_{update:06d}"
             run_analysis(config, update=update, output=output, warm_start=warm_start)
             if config.reuse_previous_vector:
@@ -223,6 +316,7 @@ def run_measurements(config: MeasurementConfig) -> None:
 
 
 def main() -> None:
+    """Parse a measurement YAML path from the command line and run measurements."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path, help="YAML file containing measurement settings")
     args = parser.parse_args()

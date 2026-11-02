@@ -1,0 +1,1121 @@
+{
+  "format": 1,
+  "stage": "complete",
+  "update": 2201,
+  "output": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/spectra/update_002201",
+  "warm_start": null,
+  "operator": "restoring-response",
+  "operator_definition": "-D[(W_next-W)/eta], older gradients and Adam frozen",
+  "world_size": 8,
+  "source_revision": null,
+  "source_dirty": null,
+  "inputs": [
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank0/metrics_snapshot_002201.pt",
+      "sha256": "629e15b1c5d57ba9523ec9f3465aa44e0cfe216fbc4c0c1dab6c9e06e414ace7"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank1/metrics_snapshot_002201.pt",
+      "sha256": "743fb10dfc789e1f54ddf355238b1c3bbc52ff218e9d5b5d73720ee0734f02e6"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank2/metrics_snapshot_002201.pt",
+      "sha256": "523cea3c96a44d44c50b118071c52833608502f44ec9f26cc5e0858eb5abab56"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank3/metrics_snapshot_002201.pt",
+      "sha256": "bf382a1e86e6ea7e04f05c01770f46e3203a44ca62d33ea2a8e12baecd569a6e"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank4/metrics_snapshot_002201.pt",
+      "sha256": "c908eb43686fa1e756e666b02b4002f851efed3d3a84d40fd8d0babeeff1e1aa"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank5/metrics_snapshot_002201.pt",
+      "sha256": "b609d907779f75d003387d864c49d844e5d70a08ad2e74420159692c69e4e114"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank6/metrics_snapshot_002201.pt",
+      "sha256": "9c824b95ff054cf955aaaa882f3c35ba135d4015b6c5029dc549e8df6911d845"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/rank7/metrics_snapshot_002201.pt",
+      "sha256": "42ca1e5bd265640367d144c122b8e383a1be9633756249677bfac948a460158f"
+    },
+    {
+      "path": "/workspace/bubbleforce/data/fineweb10B/fineweb_val_000000.bin",
+      "sha256": "5b95c8e0966f0861685b307b23dc5ae42b228ef74b28cb499784ae021f201640"
+    },
+    {
+      "path": "/workspace/bubbleforce/validation/hf-restart-002201/results/diagnostic/captures/capture_config.json",
+      "sha256": "03a05c701788fb9226a519949d33010f15fc645cfe62de96144c53ca692f8908"
+    }
+  ],
+  "optimizer_step_configs": {
+    "blocks.0.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.0.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.0.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.0.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.0.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.0.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.1.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.10.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.11.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.2.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.3.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.4.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.5.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.6.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.7.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.8.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.attn.k.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.attn.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.attn.q.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.attn.v.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.mlp.fc.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    },
+    "blocks.9.mlp.proj.weight": {
+      "optimizer": "muon",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "training_batch_tokens": 524288
+    }
+  },
+  "matrix_layouts": [
+    [
+      [
+        "blocks.0.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.0.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.10.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.2.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.4.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.4.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.6.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.8.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.8.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.0.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.1.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.10.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.2.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.4.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.5.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.6.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.8.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.9.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.0.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.10.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.10.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.2.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.2.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.4.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.6.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.6.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.8.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.0.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.10.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.11.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.2.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.3.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.4.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.6.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.7.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.8.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.0.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.1.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.11.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.3.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.4.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.5.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.7.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.8.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.9.attn.q.weight",
+        [
+          768,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.1.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.1.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.11.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.3.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.5.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.5.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.7.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.9.attn.k.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.9.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.1.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.10.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.11.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.2.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.3.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.5.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.6.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.7.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.9.attn.v.weight",
+        [
+          768,
+          768
+        ]
+      ]
+    ],
+    [
+      [
+        "blocks.1.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.11.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.11.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.3.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.3.mlp.proj.weight",
+        [
+          768,
+          3072
+        ]
+      ],
+      [
+        "blocks.5.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.7.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ],
+      [
+        "blocks.7.mlp.fc.weight",
+        [
+          3072,
+          768
+        ]
+      ],
+      [
+        "blocks.9.attn.proj.weight",
+        [
+          768,
+          768
+        ]
+      ]
+    ]
+  ],
+  "stability": [
+    {
+      "update": 2201,
+      "parameter_group": "^blocks\\..*\\.weight$",
+      "learning_rate": 0.025,
+      "weight_decay": 0.05,
+      "decay_step": 0.0012500000000000002,
+      "current_gradient_coefficient": 0.1916792392730713,
+      "predicted_zeta": 103.09583773327915,
+      "curvature_coupling_boundary": 13.43987983832685,
+      "bubble_pressure": 2.577395943331979
+    }
+  ],
+  "measurements": [
+    {
+      "tokens": 8192,
+      "readouts": [
+        {
+          "num_krylov_basis_vectors": 4,
+          "eigenvalues": [
+            1381.914958123497
+          ],
+          "seed": 921,
+          "stopping_reason": null
+        },
+        {
+          "num_krylov_basis_vectors": 8,
+          "eigenvalues": [
+            1947.60521965559
+          ],
+          "seed": 921,
+          "stopping_reason": "budget",
+          "residuals": [
+            0.007144560912097201
+          ]
+        }
+      ]
+    }
+  ]
+}

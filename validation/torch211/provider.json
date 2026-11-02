@@ -1,0 +1,8 @@
+{
+  "pod_id": "zbhxzxh9s3nmsk",
+  "created_unix": 1793496087.3519151,
+  "gpu_count": 8,
+  "gpu_type": "NVIDIA H100 80GB HBM3",
+  "cost_per_hour_usd": 31.92,
+  "terminate_after": "2026-11-01T01:51:26.748847+00:00"
+}

@@ -1,0 +1,15 @@
+{
+  "overrides": [
+    "training.train_steps=6475",
+    "training.microbatch_sequences=8",
+    "training.resume_checkpoint=/workspace/restart/checkpoint_002201",
+    "measurement.updates=[2202]",
+    "measurement.output_dir=validation/hf-restart-002201/results/eager_control",
+    "training.metrics_snapshot.quantities=[weights,momentum,executed_update]",
+    "measurement.token_counts=[8192]",
+    "measurement.microbatch_sequences=1",
+    "measurement.cpu_threads=4",
+    "measurement.eigensolver.krylov_basis_vector_counts=[4,8]"
+  ],
+  "change": "Disable GPT.compile in the diagnostic worker; retain optimizer execution and checkpoint settings."
+}

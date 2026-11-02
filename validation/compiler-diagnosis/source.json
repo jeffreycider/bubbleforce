@@ -1,0 +1,5 @@
+{
+  "bundle": "tested-source.tar.gz",
+  "sha256": "da8427b39a52c53cc7c4e4622cbf39e92b0956289e945a2a83eab77befbfe777",
+  "description": "Exact source bundle uploaded for the original failing restart and this diagnosis. Diagnostic scripts are saved separately."
+}

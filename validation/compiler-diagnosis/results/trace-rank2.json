@@ -1,0 +1,89 @@
+[
+  {
+    "microbatch": 0,
+    "loss": 29141.966796875,
+    "nonfinite": [],
+    "bias_nan": 0,
+    "bias_inf": 0,
+    "bias_max": 2.5521177519070385e+38
+  },
+  {
+    "microbatch": 1,
+    "loss": 30925.73046875,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 3,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 2,
+    "loss": 28425.23046875,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 4,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 3,
+    "loss": 29670.0390625,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 5,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 4,
+    "loss": 29110.359375,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 7,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 5,
+    "loss": 31125.84375,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 10,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 6,
+    "loss": 32408.775390625,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 10,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "microbatch": 7,
+    "loss": 30291.48046875,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 12,
+    "bias_inf": 0,
+    "bias_max": NaN
+  },
+  {
+    "after_all_reduce": true,
+    "nonfinite": [
+      "blocks.0.attn.proj.bias"
+    ],
+    "bias_nan": 82,
+    "bias_inf": 16,
+    "bias_max": NaN
+  }
+]

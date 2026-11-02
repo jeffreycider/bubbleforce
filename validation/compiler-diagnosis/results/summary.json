@@ -1,0 +1,145 @@
+{
+  "environment": {
+    "python": "3.12.3",
+    "torch": "2.10.0+cu128",
+    "cuda": "12.8",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "gpu_count": 8
+  },
+  "root_cause": "Inductor mix-order reduction returns FP32 workspace sums to a downstream kernel compiled with a BF16 pointer signature",
+  "dtype_proof": {
+    "workspace_dtype": "torch.float32",
+    "sum_dtype": "torch.float32",
+    "actual_bias_dtype": "torch.float32",
+    "all_inputs_finite": true,
+    "workspace_sum_finite": true,
+    "source_sum_max": 5.97023868560791,
+    "workspace_sum_max": 5.970238208770752,
+    "workspace_vs_source_max_error": 5.662441253662109e-07,
+    "bias_matches_wrong_bf16_pointer_read": true,
+    "bias_max": 2.020426553593072e+38,
+    "bad_dtype_values": [
+      1.4016565685892601e-15,
+      1.265625,
+      2.216844041642114e-22,
+      2.0,
+      -1.2473681906245777e+33,
+      0.1904296875,
+      9.671406556917033e+24,
+      0.0067138671875,
+      -7.108583389127582e-26,
+      1.1953125,
+      -1.723881454251952e-17,
+      1.0
+    ],
+    "correct_values": [
+      1.2668087482452393,
+      2.0016798973083496,
+      0.19136986136436462,
+      0.006726384162902832,
+      1.199880599975586,
+      1.0049933195114136,
+      1.2527393102645874,
+      4.685730934143066,
+      1.933807611465454,
+      -3.7031683921813965,
+      -2.416930675506592,
+      -1.4831740856170654
+    ],
+    "actual_values": [
+      1.4016565685892601e-15,
+      1.265625,
+      2.216844041642114e-22,
+      2.0,
+      -1.2473681906245777e+33,
+      0.1904296875,
+      9.671406556917033e+24,
+      0.0067138671875,
+      -7.108583389127582e-26,
+      1.1953125,
+      -1.723881454251952e-17,
+      1.0
+    ]
+  },
+  "restart": {
+    "change": "TORCHINDUCTOR_MIX_ORDER_REDUCTION=0",
+    "compiled_model": true,
+    "checks": [
+      {
+        "rank": 0,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 1,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 2,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 3,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 4,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 5,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 6,
+        "updates": 10,
+        "passed": true
+      },
+      {
+        "rank": 7,
+        "updates": 10,
+        "passed": true
+      }
+    ]
+  },
+  "measurement": {
+    "stage": "complete",
+    "update": 2210,
+    "measurements": [
+      {
+        "tokens": 8192,
+        "readouts": [
+          {
+            "num_krylov_basis_vectors": 4,
+            "eigenvalues": [
+              36044.06889011993
+            ],
+            "seed": 921,
+            "stopping_reason": null
+          },
+          {
+            "num_krylov_basis_vectors": 8,
+            "eigenvalues": [
+              36042.83098410743
+            ],
+            "seed": 921,
+            "stopping_reason": "agreement",
+            "residuals": [
+              0.0048427125289855705
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "cpu_proof_verification": {
+    "script": "control/verify_dtype_values.py",
+    "passed": true,
+    "matched_entries": 768
+  }
+}

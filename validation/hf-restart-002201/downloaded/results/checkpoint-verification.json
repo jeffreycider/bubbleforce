@@ -1,0 +1,42 @@
+[
+  {
+    "file": "rank0/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "58fdb7fad8918f7ae17a98b9402e9b7665e115784ff49cfd00bdb0f9229b5c1d"
+  },
+  {
+    "file": "rank1/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "9c84723603d4899a1f0c02b786487da3caaa1c6e89ef83dc64bf34919bbdd5f5"
+  },
+  {
+    "file": "rank2/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "9c954c6abdea9676548aeb58d5dbbfe128c016d54df616a17de1a3e727e41b1a"
+  },
+  {
+    "file": "rank3/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "b6cb7a9a13e379e45456a5f47882d04406df4be5666697ccce9126faa923daa1"
+  },
+  {
+    "file": "rank4/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "0a973ffb3d537fdeabc084c3ce7f59c4f7d9c071f66d11d3463ca705eacc71b0"
+  },
+  {
+    "file": "rank5/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "df521d551f15cc22d5816c9d0f5a60541b3da764baccdddabdc17d2a250a040d"
+  },
+  {
+    "file": "rank6/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "6bf7fa7d2f8814e32b84271fe772833e9c1ac93df44906b3e6ecd9838e71f07b"
+  },
+  {
+    "file": "rank7/checkpoint_002201.pt",
+    "bytes": 11908782417,
+    "sha256": "8ae831383b9a00d11fd4dcb7df52193c174a1a18fb2521fb787d0db821ea1290"
+  }
+]

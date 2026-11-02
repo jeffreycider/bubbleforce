@@ -1,0 +1,110 @@
+{
+  "name": "triton_per_fused__fused_rms_norm__fused_rms_norm_backward__to_copy_add_view_10",
+  "meta": {
+    "grid_type": "MixOrderReductionGrid",
+    "autotune_hints": "set()",
+    "kernel_name": "triton_per_fused__fused_rms_norm__fused_rms_norm_backward__to_copy_add_view_10",
+    "no_x_dim": null,
+    "atomic_add_found": false,
+    "num_load": 5,
+    "num_store": 0,
+    "num_reduction": 1,
+    "backend_hash": "D1670D28DE244E2E3F72E33F48DF60470534E9DD0E611D9CD47DE4460C472CC9",
+    "assert_indirect_indexing": true,
+    "autotune_local_cache": true,
+    "autotune_pointwise": true,
+    "autotune_remote_cache": null,
+    "force_disable_caches": false,
+    "dynamic_scale_rblock": true,
+    "max_autotune": false,
+    "max_autotune_pointwise": false,
+    "min_split_scan_rblock": 256,
+    "spill_threshold": 16,
+    "store_cubin": false,
+    "deterministic": false,
+    "force_filter_reduction_configs": false,
+    "are_deterministic_algorithms_enabled": false,
+    "RSPLIT_SIZE": 16,
+    "reduction_hint": "ReductionHint.INNER",
+    "warp_size": 32,
+    "max_threads_per_block": 1024
+  },
+  "args": [
+    {
+      "shape": [
+        8,
+        1024,
+        768
+      ],
+      "stride": [
+        786432,
+        768,
+        1
+      ],
+      "dtype": "torch.bfloat16",
+      "finite": true
+    },
+    {
+      "shape": [
+        8,
+        1024,
+        768
+      ],
+      "stride": [
+        786432,
+        768,
+        1
+      ],
+      "dtype": "torch.bfloat16",
+      "finite": true
+    },
+    {
+      "shape": [
+        8,
+        1024,
+        1
+      ],
+      "stride": [
+        1024,
+        1,
+        1
+      ],
+      "dtype": "torch.float32",
+      "finite": true
+    },
+    {
+      "shape": [
+        8192,
+        768
+      ],
+      "stride": [
+        768,
+        1
+      ],
+      "dtype": "torch.bfloat16",
+      "finite": true
+    },
+    {
+      "shape": [
+        768
+      ],
+      "stride": [
+        1
+      ],
+      "dtype": "torch.float32",
+      "finite": true
+    },
+    {
+      "shape": [
+        393216
+      ],
+      "stride": [
+        1
+      ],
+      "dtype": "torch.float32",
+      "finite": true
+    },
+    8192,
+    768
+  ]
+}

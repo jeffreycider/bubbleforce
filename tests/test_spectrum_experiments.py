@@ -39,7 +39,7 @@ def test_named_recipes_resolve_training_and_measurements(name):
     assert training['seed'] == 0
     assert training['batch_tokens'] == 524288
     assert config[2] == training['require_world_size'] == 8
-    assert training['metrics_snapshot']['steps'] == list(config[1].updates)
+    assert training['metrics_snapshot']['steps'] == list(config[1].measured_updates)
     assert training['metrics_snapshot']['quantities'] == ['weights', 'momentum']
     assert 'stop_step' not in training
 
@@ -47,7 +47,7 @@ def test_named_recipes_resolve_training_and_measurements(name):
 def test_nested_overrides_control_training_and_measurement_frequency(tmp_path):
     config = experiment_for('original_implementation', 'measurement.measure_every=300',
                             'training.train_steps=1000', f'measurement.output_dir={tmp_path / "custom_results"}')
-    assert config[1].updates == (0, 300, 600, 900, 999)
+    assert config[1].measured_updates == (0, 300, 600, 900, 999)
     assert config[0].metrics_snapshot['steps'] == [0, 300, 600, 900, 999]
     assert config[1].output_dir == tmp_path / 'custom_results'
     assert config[1].capture_dir == config[1].output_dir / 'captures'
@@ -98,16 +98,16 @@ def test_original_and_maxent_keep_cooldown():
 def test_measurement_only_overrides_paths_and_process_count(tmp_path):
     config = experiment_for('original_implementation', 'training=null',
                             f'measurement.capture_dir={tmp_path / "captures"}',
-                            'measurement.updates=[975,1000]', 'world_size=2')
+                            'measurement.measured_updates=[975,1000]', 'world_size=2')
     assert config[0] is None
     assert config[2] == 2
-    assert config[1].updates == (975, 1000)
+    assert config[1].measured_updates == (975, 1000)
     assert config[1].capture_dir == tmp_path / 'captures'
 
 
 def test_measurement_only_accepts_updates_beyond_the_training_recipe():
-    config = experiment_for('original_implementation', 'training=null', 'measurement.updates=[4800]')
-    assert config[1].updates == (4800,)
+    config = experiment_for('original_implementation', 'training=null', 'measurement.measured_updates=[4800]')
+    assert config[1].measured_updates == (4800,)
 
 
 @pytest.mark.parametrize('override', ['training.capture_dir=other', 'measurement.capture=other'])
@@ -119,11 +119,11 @@ def test_capture_directory_is_only_a_measurement_setting(override):
 @pytest.mark.parametrize('reuse_previous_vector', [False, True])
 def test_shared_measurement_config_round_trips_paths_and_updates(tmp_path, reuse_previous_vector):
     initial_vector = tmp_path / 'initial_vector'
-    config = experiment_for('original_implementation', 'measurement.updates=[20,10]',
+    config = experiment_for('original_implementation', 'measurement.measured_updates=[20,10]',
                             f'measurement.warm_start={initial_vector}', f'measurement.output_dir={tmp_path / "result"}',
                             f'measurement.reuse_previous_vector={str(reuse_previous_vector).lower()}')
     measurement = config[1]
-    assert measurement.updates == (10, 20)
+    assert measurement.measured_updates == (10, 20)
     assert measurement.warm_start == initial_vector
     assert measurement.output_dir == tmp_path / 'result'
     assert measurement.reuse_previous_vector == reuse_previous_vector
@@ -143,7 +143,7 @@ def test_restart_preserves_training_recipe_and_stops_after_requested_update(tmp_
         protocol_sha256=training_config_fingerprint(original),
     )))
     config = experiment_for('increased_momentum', f'training.resume_checkpoint={bundle}',
-                            'measurement.updates=[2009]')
+                            'measurement.measured_updates=[2009]')
     assert config[0].stop_step == 2010
     assert config[0].train_steps == 3250
     assert config[0].resume_checkpoint == str(bundle)
@@ -151,10 +151,10 @@ def test_restart_preserves_training_recipe_and_stops_after_requested_update(tmp_
         launch(experiment_for('increased_momentum', f'training.resume_checkpoint={bundle}'))
     with pytest.raises(ValueError, match='recipe differs'):
         launch(experiment_for('decreased_momentum', f'training.resume_checkpoint={bundle}',
-                                         'measurement.updates=[2009]'))
+                                         'measurement.measured_updates=[2009]'))
 
 
-@pytest.mark.parametrize('arguments', [('world_size=0',), ('measurement.updates=[3250]',), ('world_size=3',)])
+@pytest.mark.parametrize('arguments', [('world_size=0',), ('measurement.measured_updates=[3250]',), ('world_size=3',)])
 def test_invalid_training_requests_fail_before_launch(arguments):
     with pytest.raises(ValueError):
         experiment_for('original_implementation', *arguments)
@@ -171,7 +171,7 @@ def test_structured_plan_rejects_unknown_settings(override):
 
 @pytest.mark.parametrize('override', [
     'world_size=invalid', 'train=invalid', 'training.train_steps=invalid',
-    'measurement.updates=[invalid]', 'experiment=invalid',
+    'measurement.measured_updates=[invalid]', 'experiment=invalid',
 ])
 def test_structured_plan_rejects_invalid_types_and_enum_values(override):
     with pytest.raises(ValueError):
@@ -182,13 +182,13 @@ def test_structured_plan_rejects_invalid_types_and_enum_values(override):
     (['measurement.token_counts=[7]'], 'whole validation sequences'),
     (['measurement.sequence_length=0'], 'sequence_length'),
     (['measurement.measure_every=0'], 'measure_every'),
-    (['measurement.updates=[]'], 'updates'),
-    (['measurement.updates=[2,2]'], 'updates'),
-    (['measurement.updates=[-1]'], 'updates'),
+    (['measurement.measured_updates=[]'], 'updates'),
+    (['measurement.measured_updates=[2,2]'], 'updates'),
+    (['measurement.measured_updates=[-1]'], 'updates'),
     (['training.train_steps=0'], 'train_steps'),
-    (['training=null'], 'explicit measurement.updates'),
+    (['training=null'], 'explicit measurement.measured_updates'),
     (['experiment=lr_half'], 'unknown experiment'),
-    (['measurement.updates=[10]', 'training.stop_step=10'], 'precede stop_step'),
+    (['measurement.measured_updates=[10]', 'training.stop_step=10'], 'precede stop_step'),
 ])
 def test_plan_checks_related_settings_before_execution(overrides, message):
     with pytest.raises(ValueError, match=message):
@@ -199,15 +199,15 @@ def test_stop_step_selects_available_measurements_without_changing_schedule():
     config = experiment_for('original_implementation', 'training.stop_step=600')
     assert config[0].train_steps == 3250
     assert config[0].stop_step == 600
-    assert config[1].updates == (*range(0, 600, 50), 599)
-    config = experiment_for('original_implementation', 'measurement.updates=[10]',
+    assert config[1].measured_updates == (*range(0, 600, 50), 599)
+    config = experiment_for('original_implementation', 'measurement.measured_updates=[10]',
                             'training.stop_step=20')
     assert config[0].stop_step == 20
 
 
 def test_preview_does_not_require_checkpoint_or_data_files(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(run.sys, 'argv', [
-        'run', 'original_implementation', 'measurement.updates=[2009]',
+        'run', 'original_implementation', 'measurement.measured_updates=[2009]',
         f'training.resume_checkpoint={tmp_path / "missing_checkpoint"}',
         f'measurement.validation={tmp_path / "missing_validation.bin"}',
         f'measurement.output_dir={tmp_path / "unused"}', '--print-settings',
@@ -227,7 +227,7 @@ def test_run_passes_measurement_config_without_writing_settings(tmp_path, monkey
     validation = tmp_path / 'validation.bin'
     validation.touch()
     config = experiment_for('original_implementation', 'training=null', f'measurement.capture_dir={capture.parent}',
-                            'measurement.updates=[975,1000]', 'world_size=1',
+                            'measurement.measured_updates=[975,1000]', 'world_size=1',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}')
     calls = []
     def record_worker(launcher, worker):
@@ -248,7 +248,7 @@ def test_missing_later_snapshot_fails_before_launch(tmp_path, monkeypatch):
     validation = tmp_path / 'validation.bin'
     validation.touch()
     config = experiment_for('original_implementation', 'training=null', f'measurement.capture_dir={capture.parent}',
-                            'measurement.updates=[975,1000]', 'world_size=1',
+                            'measurement.measured_updates=[975,1000]', 'world_size=1',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}')
     def reject_launch(*args, **kwargs):
         raise AssertionError('measurement started before checking every snapshot')
@@ -307,7 +307,7 @@ def test_training_default_lists_are_independent():
 def test_print_settings_resolves_defaults_and_keeps_named_groups(tmp_path, monkeypatch, capsys):
     output = tmp_path / 'unused'
     monkeypatch.setattr(run.sys, 'argv', [
-        'run', 'original_implementation', 'measurement.updates=[2009]',
+        'run', 'original_implementation', 'measurement.measured_updates=[2009]',
         f'measurement.output_dir={output}', '--print-settings',
     ])
     def reject_launch(*args, **kwargs):
@@ -315,7 +315,7 @@ def test_print_settings_resolves_defaults_and_keeps_named_groups(tmp_path, monke
     monkeypatch.setattr(run, 'elastic_launch', reject_launch)
     run.main()
     settings = yaml.safe_load(capsys.readouterr().out)
-    assert settings['measurement']['updates'] == [2009]
+    assert settings['measurement']['measured_updates'] == [2009]
     assert len(settings['training']['setup']) == 9
     assert settings['training']['optimizer_groups'][0]['block_type'] == 'embed'
     assert 'pattern' not in settings['training']['optimizer_groups'][0]
@@ -359,7 +359,7 @@ def test_training_run_writes_dense_predictions_between_sparse_measurements(tmp_p
     validation.touch()
     training_shard = tmp_path / 'train.bin'
     training_shard.touch()
-    config = experiment_for('original_implementation', 'measurement.updates=[2]',
+    config = experiment_for('original_implementation', 'measurement.measured_updates=[2]',
                             f'measurement.validation={validation}', f'measurement.output_dir={tmp_path / "result"}',
                             f'training.train_data={training_shard}')
     calls = []

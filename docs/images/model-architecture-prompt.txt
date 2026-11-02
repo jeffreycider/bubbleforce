@@ -1,0 +1,32 @@
+Generated with the built-in image generation tool.
+
+Create a precise, publication-quality neural-network architecture diagram for the Bubbleforce project, based on the exact architecture specification below. Portrait white canvas, simple pastel rounded rectangles with crisp thick black outlines and black arrows, generous whitespace, clean legible sans-serif text. Visually evoke classic Transformer paper diagrams. This is a SINGLE decoder-only network, not an encoder-decoder pair. Draw the model's computational flow upward from bottom to top. Keep every label easy to read; avoid decorative art, gradients, shadows, icons.
+
+Title at top: "Bubbleforce model"
+Subtitle: "Decoder-only Transformer · 12 layers · width 768"
+
+MAIN VERTICAL COLUMN, bottom to top, connected by upward arrows:
+1. Bottom external label "Input tokens" and small text "1,024 tokens per sequence".
+2. Pink rounded rectangle "Token embedding" with small second line "50,304 → 768".
+3. Pale-yellow rounded rectangle "RMSNorm".
+4. A large light-gray rounded container labeled "Decoder block" and "Repeat 12 times". Inside this container, bottom to top:
+   a. pale-yellow "RMSNorm"
+   b. pale-orange "Causal self-attention" and second line "6 heads · 128 dimensions per head"
+   c. small white circle with "+" for residual addition
+   d. pale-yellow "RMSNorm"
+   e. pale-blue "Feed-forward" and second line "768 → 3,072 → 768" and third line "Squared ReLU"
+   f. small white circle with "+" for residual addition.
+   Draw two distinct, accurate residual bypass arrows along LEFT side inside container. First branches off the block input BEFORE first RMSNorm, travels around the first RMSNorm and attention, enters first + from left. Second branches off the first + output BEFORE second RMSNorm, travels around second RMSNorm and feed-forward, enters second + from left. Both main vertical flow and bypass are clearly visible with no ambiguous intersections.
+5. Above container pale-yellow rectangle "Final RMSNorm".
+6. Pale-lavender rectangle "Vocabulary projection" with second line "768 → 50,304".
+7. Pale-lavender rectangle "Logit soft cap" with small second line "Bound magnitude below 15".
+8. Pale-green rectangle "Cross-entropy loss". Draw a black arrow into this box from the right from label "Next-token targets".
+9. External top label "Training loss".
+
+Place ONE modest orange-tinted explanatory callout to the RIGHT of the decoder container, aligned with attention, connected with a thin non-arrow leader to attention box. Heading "Inside attention"; short lines in correct processing order: "Q, K, V projections"; "RMSNorm on Q and K"; "Partial rotary positions on Q and K"; "Causal attention · scale 0.12"; "Output projection". It must not look like an additional independent model. Q and K receive normalization and rotary positions, V does not. Do not add positional embeddings below decoder. Do not draw cross-attention. Preserve pre-normalization ordering.
+
+Footer in small gray type: "Source: harness/model_gpt.py + configs/original_implementation.yaml"
+Use exact readable labels. Overall composition should be balanced and simple despite the necessary labels. Expand vertically as needed. All arrows flow upward; input at bottom, loss at top.
+
+Final correction: Branch the lower residual connection from the central input wire before the first RMSNorm inside the decoder block. Preserve the remaining layout and labels.
+
