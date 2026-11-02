@@ -80,17 +80,6 @@ With this command:
 - **Training logs** in `runs/spectrum/original_trial_1/training/train.log`
 - **Measurement results** in `runs/spectrum/original_trial_1/spectra/`
 
-### Graph training loss
-
-To plot the mean training cross-entropy per token, averaged across all GPUs, run:
-
-```bash
-python makefig.py train-loss runs/spectrum/original_implementation \
-  --output figures/train_loss.png
-```
-
-The command saves the graph to `figures/train_loss.png`. Each point on the graph uses the training batch before its optimizer update and the horizontal axis counts completed updates.
-
 ## Restart training from a checkpoint
 
 Since runs are expensive, if you prefer to continue a saved run, we provide snapshots and restart checkpoints in the [checkpoint bucket](https://huggingface.co/buckets/jacknzheng/bubbleforce).
@@ -154,13 +143,6 @@ The runner records snapshots during training, then computes their measurements a
 Results are saved under `spectra/update_<NNNNNN>/` within the output directory.
 
 ### Graph $\zeta$
-
-To plot the leading eigenvalue estimate at each saved update use the following command:
-
-```bash
-python makefig.py zeta runs/spectrum/increased_momentum_every50 \
-  --output figures/zeta.png
-```
 
 ![Archived increased-momentum path-spring measurements](figures/blog_six/higher_zeta_full.png)
 
