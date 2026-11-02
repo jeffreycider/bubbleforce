@@ -4,7 +4,7 @@ This repository contains source code for the blog post by Jeffrey Cheng and Jack
 
 1. [Preliminaries](#preliminaries)
 2. [Start training with an experiment config](#start-training-with-an-experiment-config)
-3. [Restart training from a checkpoint](#restart-training-from-a-checkpoint)
+3. [Resume training from a checkpoint](#resume-training-from-a-checkpoint)
 4. [Measure bubbleforce at a snapshot or a given frequency](#measure-zeta-at-a-snapshot-or-a-given-frequency)
 5. [Experiment arguments](AGENTS.md#experiment-arguments)
 6. [Code guide](AGENTS.md#code-guide)
@@ -77,30 +77,17 @@ python3 run.py configs/nanogpt_muon_baseline.yaml \
 
 The runner calls `predict_bubbleforce` for the single Muon group at every training update, then writes `update` and `predicted_zeta` to `<output_dir>/predicted_equilibrium.csv`.
 
-For a nonpositive learning rate or current-gradient weight, the runner leaves `predicted_zeta` blank. If the kernel calculation fails, it raises an error.
+## Resume training from a checkpoint
 
-For each measured update, the runner saves eigenvalues, solver readouts, and eigenvector files under `<output_dir>/bubbleforce/<update>/`. For example, update 2025 is saved in `<output_dir>/bubbleforce/2025/`. It saves `measurement_results.json` and `eigenvalues.csv` after each validation token-count solve.
-
-## Restart training from a checkpoint
-
-You may resume training from a later step by [downloading a restart checkpoint](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/restarts), and setting `training.resume_checkpoint` to its local checkpoint directory.
-
-This example uses eight GPUs to resume the supplied decreased-momentum run through update `2210`, then measures that update. Match the checkpoint's training settings and choose a new output directory.
-
-```bash
-python3 run.py configs/decreased_momentum.yaml \
-  training.train_steps=6475 \
-  training.microbatch_sequences=8 \
-  training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
-  'measurement.measured_updates=[2210]' \
-  measurement.output_dir=runs/spectrum/decreased_momentum_restart
-```
+We also provide restart checkpoints to resume training at various steps. Commands and instructions [are here in the AGENTS.md](AGENTS.md#restart-training-from-a-checkpoint)
 
 ## Measure $\zeta$ at a snapshot or a given frequency
 
 To compute bubbleforce, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
 
 After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the normalized Muon restoring response, using 16,777,216 validation tokens per measurement.
+
+If, for example, the residual error from the Arnoldi eigenvalue approximation is too large, we provide [commands to rerun Arnoldi iterations in AGENTS.md](AGENTS.md#rerun-arnoldi-with-a-larger-krylov-basis) with a larger Krylov basis.
 
 ### Specify measurement frequency
 
@@ -114,36 +101,8 @@ python3 run.py configs/increased_momentum.yaml \
 
 ![Archived increased-momentum bubbleforce measurements](figures/blog_six/higher_zeta_full.png)
 
-### Measure a saved snapshot
-
-We have also [provided snapshots](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/snapshots) we recorded during our runs, which can be used to compute the $\zeta_t$ value at the respective step. But you can also use the command below to rerun calculations of snapshots, if for example the eigenvalue solver's residual error is too high.
-
-As an example, you can download the supplied decreased-momentum snapshot at update `2025`:
-
-```bash
-hf buckets sync \
-  hf://buckets/jacknzheng/bubbleforce/snapshots/decreased_momentum/decreased_momentum__update_002025 \
-  ./decreased_momentum__update_002025
-```
-
-Set `training=null`, as to not kick off a new run, then simply pass in the downloaded directory and select its update:
-
-```bash
-python3 run.py configs/decreased_momentum.yaml \
-  training=null \
-  measurement.capture_dir=./decreased_momentum__update_002025 \
-  'measurement.measured_updates=[2025]' \
-  measurement.output_dir=runs/spectrum/decreased_momentum_snapshot2025
-```
-
-This loads the snapshot for measurement. For snapshots from your own run, point `measurement.capture_dir` to that run's `captures/` directory.
-
 ## Codebase architecture
 
-![Software architecture diagram](figures/architecture.svg)
+![Software architecture diagram](figures/architecture-excalidraw.svg)
 
-Edit [figures/architecture.dot](figures/architecture.dot), then regenerate the SVG with Graphviz:
-
-```bash
-dot -Tsvg figures/architecture.dot -o figures/architecture.svg
-```
+Edit [architecture.excalidraw](architecture.excalidraw), then export it as `figures/architecture-excalidraw.svg`.

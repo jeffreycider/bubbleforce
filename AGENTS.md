@@ -90,13 +90,6 @@ python3 run.py configs/nanogpt_muon_baseline.yaml world_size=4 training.microbat
 python3 run.py configs/nanogpt_muon_baseline.yaml training.checkpoint.every=500 \
   measurement.output_dir=runs/spectrum/with_checkpoints
 
-# Re-measure a saved snapshot with more validation tokens and a bigger Krylov basis
-python3 run.py configs/decreased_momentum.yaml training=null \
-  measurement.capture_dir=./decreased_momentum__update_002025 \
-  'measurement.measured_updates=[2025]' \
-  'measurement.token_counts=[16777216,33554432]' \
-  'measurement.eigensolver.krylov_basis_vector_counts=[16,32,64,128,192]' \
-  measurement.output_dir=runs/spectrum/dm2025_bigger
 ```
 
 Environment variables:
@@ -207,6 +200,23 @@ python3 run.py configs/decreased_momentum.yaml training=null \
 
 For snapshots from your own run, point `measurement.capture_dir` at that run's `captures/` directory. Keep the validation shard available.
 
+### Rerun Arnoldi with a larger Krylov basis
+
+If the eigenpair residual is too large or the solver stops with `budget`, rerun the saved snapshot with a larger basis. After downloading the snapshot using the preceding commands, increase the maximum basis size from 128 to 192 vectors:
+
+```bash
+python3 run.py configs/decreased_momentum.yaml training=null \
+  measurement.capture_dir=./decreased_momentum__update_002025 \
+  'measurement.measured_updates=[2025]' \
+  'measurement.token_counts=[16777216]' \
+  'measurement.eigensolver.krylov_basis_vector_counts=[16,32,64,128,192]' \
+  measurement.output_dir=runs/spectrum/dm2025_larger_basis
+```
+
+Keep the snapshot and validation token count fixed when comparing residuals. Read the new residual and stopping reason in `runs/spectrum/dm2025_larger_basis/bubbleforce/2025/eigenvalues.csv`. A larger basis gives the solver more iterations before reaching its budget; check the resulting residual before interpreting the eigenvalue.
+
+To check sensitivity to the validation sample size separately, use `'measurement.token_counts=[16777216,33554432]'` and choose another new `measurement.output_dir`.
+
 ### Restart training from a checkpoint
 
 ```bash
@@ -291,7 +301,7 @@ Predicted ζ (no model needed):
 
 Checklist before interpreting a measured ζ:
 
-1. **Did it converge?** Trust `stopping_reason = agreement` together with a small residual. In the validation runs, converged residuals were about 0.003–0.007. If you see `budget` or a large residual, re-measure with a bigger `krylov_basis_vector_counts`, optionally passing `measurement.warm_start` with the earlier `current_vector_rank*.pt`.
+1. **Did it converge?** Trust `stopping_reason = agreement` together with a small residual. In the validation runs, converged residuals were about 0.003–0.007. If you see `budget` or a large residual, follow the [larger Krylov basis example](#rerun-arnoldi-with-a-larger-krylov-basis), optionally passing `measurement.warm_start` with the earlier `current_vector_rank*.pt`.
 2. **Is it stable across sample sizes?** Measure two `token_counts` (for example 16.8M and 33.6M). If the eigenvalue moves a lot, validation-sample noise dominates. Small token counts, such as 8,192 tokens, check that the code runs; they do not give real estimates.
 3. **Compare with the prediction at the same update.** The ratio `measured ζ / predicted_zeta` near 1 means the run sits at the frozen-kernel stability edge. Above 1, the frozen model predicts the top mode grows. Far below 1 means there is room to spare. The [blog figures](figures/blog_six/) plot both curves across training.
 4. **Remember what is frozen.** The operator holds older gradients, Adam parameters and the optimizer state fixed, and it uses validation tokens rather than the training minibatch. It is a one-step, fixed-state linearization; it does not simulate the trajectory. Spikes followed by recovery along a run are a separate observation (see the self-stabilization paper below).
