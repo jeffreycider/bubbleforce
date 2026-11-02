@@ -76,7 +76,9 @@ python run.py nanogpt_muon_baseline \
 
 ## Restart training from a checkpoint
 
-You may resume training from a later step by [downloading a restart checkpoint](AGENTS.md#restart-training-from-a-checkpoint), set `training.resume_checkpoint` to its local checkpoint directory. This example uses eight GPUs to resume the supplied decreased-momentum run through update `2210`, then measures that update. Match the checkpoint's training settings and choose a new output directory.
+You may resume training from a later step by [downloading a restart checkpoint](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/restarts), and setting `training.resume_checkpoint` to its local checkpoint directory.
+
+This example uses eight GPUs to resume the supplied decreased-momentum run through update `2210`, then measures that update. Match the checkpoint's training settings and choose a new output directory.
 
 ```bash
 python run.py decreased_momentum \
@@ -95,7 +97,7 @@ After training finishes, it loads each saved update and estimates the largest po
 
 ### Specify measurement frequency
 
-If you'd like to measure $\zeta_t$ at a fixed interval, set `measurement.measure_every` to the desired interval. The default is every 50 updates.
+If you'd like to measure $\zeta_t$ at a fixed interval, set `measurement.measure_every` to the desired interval. The default measurement frequency is every 50 updates.
 
 ```bash
 python run.py increased_momentum \
@@ -107,7 +109,9 @@ python run.py increased_momentum \
 
 ### Measure a saved snapshot
 
-We have also provided snapshots we recorded during our runs. As an example, you can download the supplied decreased-momentum snapshot at update `2025`:
+We have also [provided snapshots](https://huggingface.co/buckets/jacknzheng/bubbleforce/tree/snapshots) we recorded during our runs, which can be used to compute the $\zeta_t$ value at the respective step. But you can also use the command below to rerun calculations of snapshots, if for example the eigenvalue solver's residual error is too high.
+
+As an example, you can download the supplied decreased-momentum snapshot at update `2025`:
 
 ```bash
 hf buckets sync \
@@ -125,9 +129,7 @@ python run.py decreased_momentum \
   measurement.output_dir=runs/spectrum/decreased_momentum_snapshot2025
 ```
 
-This loads the snapshot for measurement.
-
-You can use it to rerun the eigenvalue solver with a larger Krylov basis if the residual error is too high. For snapshots from your own run, point `measurement.capture_dir` to that run's `captures/` directory.
+This loads the snapshot for measurement. For snapshots from your own run, point `measurement.capture_dir` to that run's `captures/` directory.
 
 ## Model config
 
