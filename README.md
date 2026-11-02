@@ -49,13 +49,13 @@ python run.py nanogpt_muon_baseline --print-settings
 
 Choose another experiment with its corresponding command:
 
-| Experiment           | Description                                                                                                                                                                                                                                                                       | Command                            |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| MaxEntSlop           | Here we switch from exponential moving average (EMA) momentum to the MaxEntSlop kernel at update `1000`, then interpolate its settings through to update `3250`. We retain the original learning-rate cooldown. You can read the full settings in maxentslop.yaml.                | `python run.py maxentslop`         |
-| Double learning rate | Here we use a constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `2`. You can read the full settings in lr_double.yaml.                                                                                                          | `python run.py lr_double`          |
-| Half learning rate   | Here we use constant learning rates until update `2009`, then multiply every optimizer group's learning rate by `0.5`. You can read the full settings in lr_half.yaml.                                                                                                            | `python run.py lr_half`            |
-| Increased momentum   | At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.9750961447125188` which was chosen to double the maximum tolerable bubbleforce. We keep learning rates constant through training. You can read the full settings in increased_momentum.yaml.            | `python run.py increased_momentum` |
-| Decreased momentum   | At update `2009`, we change Muon decay and Nesterov mix from `0.95` to `0.8990666066208468` which was chosen to halve the maximum tolerable bubbleforce. We also keep learning rates constant through training. Again, you can read the full settings in decreased_momentum.yaml. | `python run.py decreased_momentum` |
+| Experiment           | Settings                                                                                                | Command                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| MaxEntSlop           | Single EMA momentum → MaxEntSlop kernel at update `1000`, interpolated through `3250`. LR cooldown kept | `python run.py maxentslop`         |
+| Double learning rate | Constant LR then all LRs × `2` at update `2009`                                                         | `python run.py lr_double`          |
+| Half learning rate   | Constant LR then all LRs × `0.5` at update `2009`                                                       | `python run.py lr_half`            |
+| Increased momentum   | Constant LR then Muon decay and Nesterov mix change from `0.95` → `0.9750961447125188` at update `2009` | `python run.py increased_momentum` |
+| Decreased momentum   | Constant LR then Muon decay and Nesterov mix change from `0.95` → `0.8990666066208468` at update `2009` | `python run.py decreased_momentum` |
 
 ### Log experiment results
 
