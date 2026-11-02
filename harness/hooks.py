@@ -238,15 +238,16 @@ def validate_at_step_boundaries(*, every: int = 0, final_tenth_every: int = 0,
 
 
 def print_training_progress(*, every: int = 1) -> Hook:
-    """Print completed updates, elapsed training time and mean update duration to the console."""
+    """Log completed updates, mean training loss and elapsed training time."""
     def hook(config: Config, state: NanoGPTRunState) -> None:
         step = state.step
         if every and step % every == 0:
             approx_training_time = state.training_time + (time.perf_counter() - state.clock_start)
             state.print_log(f"step:{step+1}/{config['train_steps']}"
+                               + f" train_loss:{state.train_loss:.5f}"
                                + f" train_time:{approx_training_time:.3f}s"
                                + f" step_avg:{1000*approx_training_time/(step + 1 - config.get('start_step', 0)):.2f}ms",
-                               console=True, log=False)
+                               console=True)
     return hook
 
 

@@ -1,4 +1,5 @@
 numpy
+matplotlib
 PyYAML
 omegaconf==2.3.0
 wandb
