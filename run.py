@@ -1,11 +1,10 @@
-"""Train a named experiment and measure snapshots, or measure an existing capture."""
+"""Load an experiment YAML to train and measure snapshots, or measure an existing capture."""
 
 from __future__ import annotations
 
 import argparse
 import datetime
 from dataclasses import asdict
-from enum import Enum
 import glob
 import json
 import os
@@ -28,29 +27,19 @@ from configs.measurement_config import MeasurementConfig
 from configs.train_config import TrainConfig
 
 
-class Experiment(str, Enum):
-    nanogpt_muon_baseline = "nanogpt_muon_baseline"
-    increased_momentum = "increased_momentum"
-    decreased_momentum = "decreased_momentum"
-    lr_half = "lr_half"
-    lr_double = "lr_double"
-    maxentslop = "maxentslop"
-
-
 def prepare_experiment(
-    experiment_name: Experiment | str, config_overrides: list[str] | None = None,
+    experiment_config_path: Path | str, config_overrides: list[str] | None = None,
 ) -> tuple[TrainConfig | None, MeasurementConfig, int]:
     """Merge an experiment YAML with CLI arg overrides and build the training and measurement configs.
 
     Args:
-        experiment_name: Experiment whose YAML file in configs/ is loaded.
+        experiment_config_path: Load YAML from this absolute path or path relative to the working directory.
         config_overrides: CLI key=value settings that replace YAML values.
 
     Returns:
         The training config (None for measurement-only runs), the measurement
         config, and the number of worker processes.
     """
-    experiment_config_path = Path(__file__).parent / "configs" / f"{Experiment(experiment_name).value}.yaml"
     experiment_config = OmegaConf.to_container(OmegaConf.merge(
         OmegaConf.load(experiment_config_path),
         OmegaConf.from_dotlist(config_overrides or []),
@@ -216,15 +205,22 @@ def main() -> None:
 
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
-        "experiment", choices=[experiment_option.value for experiment_option in Experiment],
+        "experiment_config_path", type=Path, metavar="CONFIG_PATH",
+        help="path to an experiment YAML, e.g. configs/nanogpt_muon_baseline.yaml",
     )
     argument_parser.add_argument("overrides", nargs="*", metavar="key=value", type=key_value_override)
     argument_parser.add_argument(
         "--print-settings", action="store_true", help="print merged settings without running workers",
     )
     cli_arguments = argument_parser.parse_args()
+    if not cli_arguments.experiment_config_path.is_file():
+        argument_parser.error(
+            f"experiment config not found: {cli_arguments.experiment_config_path}. "
+            "Pass a YAML file path, e.g. configs/nanogpt_muon_baseline.yaml; "
+            "bare experiment names are no longer supported."
+        )
     training_config, measurement_config, world_size = prepare_experiment(
-        cli_arguments.experiment, cli_arguments.overrides,
+        cli_arguments.experiment_config_path, cli_arguments.overrides,
     )
     if cli_arguments.print_settings:
         print(OmegaConf.to_yaml(dict(

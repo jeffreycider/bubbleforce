@@ -1,19 +1,15 @@
 """Compute Muon displacements and their response to weight perturbations."""
 
-from collections.abc import Mapping
-from functools import partial
-
 import torch
-from torch.func import jvp
 
-from configs.measurement_config import MuonStepConfig, ShardedVectorConfig
+from configs.measurement_config import MuonStepConfig
 from bubbleforce.analysis.loss_hessian import LossHessian
-from bubbleforce.analysis.muon_jvp import linearize_newton_schulz
+from bubbleforce.analysis.muon_jvp import compute_newton_schulz_jvp
 from bubbleforce.analysis.sharded_hessian import compute_distributed_hvp
 from bubbleforce.analysis.sharded_vector import pack_tensor, unpack_vector
-from optimizers.ringed.muon import (
-    Muon, compute_weight_after_muon_step, compute_weight_after_muonh_step,
-)
+from bubbleforce.load_checkpoint import MeasurementCheckpoint
+from optimizers.ringed.muon import Muon
+
 
 def compute_negative_update_jvp(
     current_weight: torch.Tensor,
@@ -27,8 +23,7 @@ def compute_negative_update_jvp(
     Propagate the weight perturbation and its gradient response through the
     saved update while holding older momentum gradients fixed. A Jacobian-vector
     product (JVP) measures the first-order response along this perturbation.
-    Compute how the next updated weights respond by differentiating the next weights
-    with respect to both current weights and the scaled update direction.
+    Add the weight-decay response to the scaled Newton-Schulz response.
 
     Args:
         current_weight: Saved weight matrix, shape (rows, columns).
@@ -50,39 +45,23 @@ def compute_negative_update_jvp(
         muon_step_config.current_gradient_coefficient
         * muon_step_config.training_batch_tokens
         * gradient_response_to_weight_perturbation
-    )
+    ) # Hv * N * c_0
 
-    newton_schulz_output, apply_newton_schulz_jacobian = linearize_newton_schulz(saved_momentum)
+    _, newton_schulz_response = compute_newton_schulz_jvp(
+        saved_momentum, momentum_response
+    )
     matrix_shape_scale = Muon.shape_scale(current_weight)
-    scaled_update_direction = newton_schulz_output * matrix_shape_scale
-    scaled_update_response = matrix_shape_scale * apply_newton_schulz_jacobian(momentum_response)
+    scaled_update_response = matrix_shape_scale * newton_schulz_response
 
-    if muon_step_config.optimizer == "muonh":
-        compute_next_weight = compute_weight_after_muonh_step
-    else:
-        compute_next_weight = partial(
-            compute_weight_after_muon_step,
-            weight_decay=muon_step_config.weight_decay,
-        )
-
-    _, next_weight_response = jvp(
-        partial(compute_next_weight, learning_rate=muon_step_config.learning_rate),
-        (current_weight.double(), scaled_update_direction.double()),
-        (weight_perturbation.double(), scaled_update_response.double()),
-    )
     return (
-        (weight_perturbation.double() - next_weight_response)
-        / muon_step_config.learning_rate
+        muon_step_config.weight_decay * weight_perturbation.double()
+        + scaled_update_response.double()
     ).to(weight_perturbation.dtype)
 
 
-
-def compute_muon_response(
-    vector_config: ShardedVectorConfig,
+def compute_optimizer_jvp(
+    checkpoint: MeasurementCheckpoint,
     hessian: LossHessian,
-    weights: Mapping[str, torch.Tensor],
-    momenta: Mapping[str, torch.Tensor],
-    muon_step_config: Mapping[str, MuonStepConfig],
     direction_shard: torch.Tensor,
 ) -> torch.Tensor:
     """Compute the Muon update's response across weight matrices.
@@ -91,10 +70,11 @@ def compute_muon_response(
     perturbation and gradient response through its saved Muon update.
     Hold older gradients and Adam parameters fixed.
 
-    Supply local checkpoint tensors and config by parameter name.
+    Read assigned matrices from the loaded model and momentum by parameter name.
     Run on every rank. Return this rank's flattened
     -D[(W_next - W) / eta][v], with zero padding.
     """
+    vector_config = checkpoint.vector_config
     gradient_perturbations = unpack_vector(
         compute_distributed_hvp(vector_config, hessian, direction_shard),
         config=vector_config,
@@ -104,10 +84,11 @@ def compute_muon_response(
     return pack_tensor(
         {
             name: compute_negative_update_jvp(
-                weight, momenta[name], muon_step_config[name],
+                checkpoint.model.get_parameter(name).detach(),
+                momentum, checkpoint.step_configs[name],
                 weight_perturbations[name], gradient_perturbations[name],
             )
-            for name, weight in weights.items()
+            for name, momentum in checkpoint.momenta.items()
         },
         config=vector_config,
     )

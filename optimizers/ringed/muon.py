@@ -81,27 +81,6 @@ def compute_weight_after_muon_step(
                      momentum_direction, alpha=-learning_rate)
 
 
-def compute_weight_after_muonh_step(
-    weight: torch.Tensor, momentum_direction: torch.Tensor, *, learning_rate: float,
-) -> torch.Tensor:
-    """Take a MuonH step and rescale the weight to its original Frobenius norm.
-
-    Args:
-        weight: Current weight matrix W, shaped (rows, columns).
-        momentum_direction: Shape-scaled msign of MuonH's momentum,
-            shaped like W, before multiplying by the learning rate. This function
-            rescales the direction to W's Frobenius norm before stepping.
-        learning_rate: Step size for the norm-matched direction.
-
-    Returns:
-        The updated weight matrix, not its displacement, rescaled to W's norm
-        (with a 1e-10 denominator floor). Neither input is mutated.
-    """
-    p_norm = weight.norm()
-    candidate = weight - learning_rate * momentum_direction * p_norm / momentum_direction.norm().clamp_min(1e-10)
-    return candidate / candidate.norm().clamp_min(1e-10) * p_norm
-
-
 @dataclass(frozen=True)
 class PolarObservation:
     """Actual polar-map inputs/output, before shape scaling and weight decay.
@@ -149,11 +128,6 @@ class Muon(FiniteHistoryOptimizer):
         parameter_state.update(ring.state_dict())
         return apply(kernel, ring).view_as(parameter)
 
-    def apply_update(self, parameter: torch.Tensor, update: torch.Tensor,
-                     group: dict[str, Any]) -> None:
-        parameter.copy_(compute_weight_after_muon_step(
-            parameter, update, learning_rate=group["lr"], weight_decay=group["weight_decay"]))
-
     @torch.no_grad()
     def step(self, closure=None):
         loss = None
@@ -190,20 +164,11 @@ class Muon(FiniteHistoryOptimizer):
                                 p, p.grad, direction, update, kernel, iteration,
                                 self.state[p]["gradient_filled"]))
                         update *= self.shape_scale(p)
-                        self.apply_update(p, update, group)
+                        p.copy_(compute_weight_after_muon_step(
+                            p, update, learning_rate=group["lr"],
+                            weight_decay=group["weight_decay"],
+                        ))
                 if distributed:
                     dist.all_gather(padded[base:base + world], padded[base + rank])
             group["iteration"] += 1
         return loss
-
-
-class MuonH(Muon):
-    """Take Muon steps, rescaling each weight matrix to its original Frobenius norm."""
-
-    def __init__(self, params: Iterable[torch.Tensor], momentum_scheduler: MomentumScheduler,
-                 lr: float = 0.02) -> None:
-        super().__init__(params, momentum_scheduler, lr=lr, weight_decay=0.0)
-
-    def apply_update(self, parameter: torch.Tensor, update: torch.Tensor,
-                     group: dict[str, Any]) -> None:
-        parameter.copy_(compute_weight_after_muonh_step(parameter, update, learning_rate=group["lr"]))

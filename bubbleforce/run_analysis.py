@@ -18,11 +18,11 @@ import torch.distributed as dist
 
 from bubbleforce.analysis.eigensolver import solve_eigenpairs
 from bubbleforce.analysis.loss_hessian import LossHessian
-from bubbleforce.analysis.momentum_stability import compute_bubbleforce
-from bubbleforce.analysis.muon_step import compute_muon_response
+from bubbleforce.analysis.compute_bubbleforce import compute_bubbleforce
+from bubbleforce.analysis.muon_step import compute_optimizer_jvp
 from configs.measurement_config import LossHessianConfig, MeasurementConfig
 from bubbleforce.load_checkpoint import (
-    MeasurementCheckpoint, load_checkpoint_for_analysis, load_model_from_checkpoint,
+    MeasurementCheckpoint, load_checkpoint_for_analysis,
     load_initial_eigenvector, load_validation_token_batch,
 )
 from harness.schedules import learning_rate_factor
@@ -90,7 +90,7 @@ def predict_equilibrium(training_config: dict, updates=None):
             train_steps, excluding that endpoint.
 
     Yields:
-        A dictionary for each requested update and Muon or MuonH parameter
+        A dictionary for each requested update and Muon parameter
         group. Include the scheduled settings and predicted_zeta. If the
         prediction is unavailable, set predicted_zeta to None and include
         a reason.
@@ -107,7 +107,7 @@ def predict_equilibrium(training_config: dict, updates=None):
     optimizer_groups = [
         (group, momentum_scheduler(group["hyperparams"]["momentum"]))
         for group in training_config["optimizer_groups"]
-        if group["optimizer"] in {"muon", "muonh"}
+        if group["optimizer"] == "muon"
     ]
     for update in updates:
         if type(update) is not int or not 0 <= update < train_steps:
@@ -132,9 +132,7 @@ def predict_equilibrium(training_config: dict, updates=None):
                 learning_rate=learning_rate, weight_decay=weight_decay, decay_step=decay_step,
                 current_gradient_coefficient=current_gradient_coefficient, predicted_zeta=None,
             )
-            if group["optimizer"] == "muonh":
-                row["reason"] = "MuonH has no scalar kernel stability law here"
-            elif learning_rate <= 0 or current_gradient_coefficient <= 0:
+            if learning_rate <= 0 or current_gradient_coefficient <= 0:
                 row["reason"] = "positive learning rate and current-gradient coefficient required"
             else:
                 try:
@@ -153,7 +151,6 @@ def predict_equilibrium(training_config: dict, updates=None):
 def compute_bubbleforce_eigenpairs(
     config: MeasurementConfig,
     checkpoint: MeasurementCheckpoint,
-    model: torch.nn.Module,
     validation_batch: tuple[torch.Tensor, torch.Tensor],
     token_count: int,
     initial_vector: torch.Tensor | None = None,
@@ -168,9 +165,8 @@ def compute_bubbleforce_eigenpairs(
     Args:
         config: Measurement settings for microbatch size, Hessian evaluation,
             numerical precision, and the eigensolver.
-        checkpoint: Loaded snapshot with momentum tensors, optimizer settings,
+        checkpoint: Loaded model with momentum tensors, optimizer settings,
             and parameter assignments for each worker.
-        model: Model loaded with the snapshot's weights and buffers.
         validation_batch: This worker's input and target token tensors, each
             with dimensions (local_sequences, sequence_length).
         token_count: Total validation token count across all workers, used to
@@ -189,21 +185,16 @@ def compute_bubbleforce_eigenpairs(
     """
     vector_config = checkpoint.vector_config
     hessian = LossHessian(
-        model, vector_config.parameter_names, validation_batch, config.microbatch_sequences,
+        checkpoint.model, vector_config.parameter_names, validation_batch, config.microbatch_sequences,
         global_tokens=token_count,
         config=LossHessianConfig(mode=config.hvp_mode, gemm_precision=config.gemm_precision),
     )
     try:
-        local_weights = {
-            name: checkpoint.snapshot["model_before"][name].to(vector_config.device)
-            for name in checkpoint.momenta
-        }
-        apply_restoring_response = partial(
-            compute_muon_response, vector_config, hessian,
-            local_weights, checkpoint.momenta, checkpoint.step_configs,
+        apply_optimizer_jacobian = partial(
+            compute_optimizer_jvp, checkpoint, hessian,
         )
         readouts, eigenvectors = solve_eigenpairs(
-            apply_restoring_response, vector_config, config.eigensolver,
+            apply_optimizer_jacobian, vector_config, config.eigensolver,
             initial_basis_vector=initial_vector, save_readouts=on_solver_readout,
         )
     finally:
@@ -247,16 +238,15 @@ def run_analysis(
             data fail the measurement checks.
     """
     with initialize_analysis_process_group(config) as (rank, world_size, device):
-        
+
         checkpoint = load_checkpoint_for_analysis(config.capture_dir, update, rank, world_size, device)
-        model = load_model_from_checkpoint(checkpoint)
         initial_vector = load_initial_eigenvector(warm_start, checkpoint.vector_config)
         create_measurement_output_directory(output, rank, world_size)
         measurement_report = dict(stage="loaded", update=update, measurements=[])
         if rank == 0:
             recipe_path = config.capture_dir / "capture_config.json"
             stability = list(predict_equilibrium(
-                json.loads(recipe_path.read_text()), [checkpoint.snapshot["update"]],
+                json.loads(recipe_path.read_text()), [checkpoint.update],
             )) if recipe_path.is_file() else [
                 dict(predicted_zeta=None, reason="capture has no capture_config.json recipe"),
             ]
@@ -276,7 +266,7 @@ def run_analysis(
                 rank=rank, token_count=token_count,
             )
             measurement, eigenvectors = compute_bubbleforce_eigenpairs(
-                config, checkpoint, model, validation_batch, token_count, initial_vector, on_solver_readout,
+                config, checkpoint, validation_batch, token_count, initial_vector, on_solver_readout,
             )
             measurement_report["measurements"].append(measurement)
             save_eigenvector_shards(output, token_count, rank, eigenvectors)

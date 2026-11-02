@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 import torch
 from torch import Tensor
 
@@ -11,50 +9,40 @@ from optimizers.ringed.constants import (
 )
 
 
-def linearize_newton_schulz(momentum: Tensor) -> tuple[Tensor, Callable[[Tensor], Tensor]]:
-    """Evaluate the BF16 polar approximation and cache its linearization.
+def compute_newton_schulz_jvp(momentum_matrix: Tensor, momentum_response: Tensor) -> tuple[Tensor, Tensor]:
+    """Evaluate the BF16 polar approximation and its response to a perturbation.
 
     Propagate tangents in FP32 (FP64 for FP64 tangents), treating casts and rounding
     as identity derivatives. Tangents are not rounded at each intermediate.
 
     Args:
-        momentum: Reference matrix, shaped (rows, columns), before msign. Its
-            twelve Newton-Schulz steps are evaluated and cached in BF16.
+        momentum: Reference matrix, shaped (rows, columns), before msign.
+        tangent: Momentum perturbation with the same shape and device.
 
     Returns:
-        The BF16 polar approximation, followed by a callable mapping a same-shaped
-        momentum perturbation to Dmsign(M)[v]. The callable returns a tensor on
-        the same device, in FP64 if the perturbation is
-        FP64 and FP32 otherwise. No Hessian, shape scale or learning rate is
-        applied. This differentiates smooth arithmetic at rounded intermediates,
-        not the discontinuous quantization map.
+        Return the BF16 polar approximation and its Jacobian-vector product.
+        Compute the product in FP64 for FP64 tangents, otherwise in FP32,
+        differentiating smooth arithmetic at rounded BF16 intermediates.
     """
-    tall = momentum.shape[0] > momentum.shape[1]
-    g, denominator, x = normalize_for_newton_schulz(momentum.detach())
+    tall = momentum_matrix.shape[0] > momentum_matrix.shape[1]
+    g, denominator, x = normalize_for_newton_schulz(momentum_matrix.detach())
     if not bool(g.norm() > 0):
         raise ValueError("NS norm derivative is undefined at zero momentum")
-    primals = []
+    dtype = torch.float64 if momentum_response.dtype == torch.float64 else torch.float32
+    e = momentum_response.to(dtype)
+    if tall:
+        e = e.mT
+    gg, dd = g.to(dtype), denominator.to(dtype)
+    # Differentiate the norm using its unrounded value and the BF16 denominator.
+    dnorm = (gg * e).sum() / gg.norm()
+    dx = e / dd - gg * dnorm / dd.square()
+    a, b, c = NEWTON_SCHULZ_COEFFICIENTS
     for _ in range(NEWTON_SCHULZ_STEPS):
         following, gram, polynomial = newton_schulz_iteration(x)
-        primals.append((x, gram, polynomial))
+        xx, aa, bb = x.to(dtype), gram.to(dtype), polynomial.to(dtype)
+        da = dx @ xx.mT + xx @ dx.mT
+        db = b * da + c * (da @ aa + aa @ da)
+        dx = a * dx + db @ xx + bb @ dx
         x = following
 
-    def jvp(tangent: Tensor) -> Tensor:
-        dtype = torch.float64 if tangent.dtype == torch.float64 else torch.float32
-        e = tangent.to(dtype)
-        if tall:
-            e = e.mT
-        gg, dd = g.to(dtype), denominator.to(dtype)
-        # Norm's identity-rounding AD derivative uses the unrounded real norm.
-        # The denominator's PRIMAL remains the exact recorded BF16 value.
-        dnorm = (gg * e).sum() / gg.norm()
-        dx = e / dd - gg * dnorm / dd.square()
-        a, b, c = NEWTON_SCHULZ_COEFFICIENTS
-        for x, gram, polynomial in primals:
-            xx, aa, bb = x.to(dtype), gram.to(dtype), polynomial.to(dtype)
-            da = dx @ xx.mT + xx @ dx.mT
-            db = b * da + c * (da @ aa + aa @ da)
-            dx = a * dx + db @ xx + bb @ dx
-        return dx.mT if tall else dx
-
-    return x.mT if tall else x, jvp
+    return (x.mT, dx.mT) if tall else (x, dx)

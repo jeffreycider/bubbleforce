@@ -24,7 +24,7 @@ Start at `prepare_experiment` in [run.py](run.py), which merges the YAML with co
 | Save or restore training                 | [recording/](harness/recording/), [checkpoint.py](harness/checkpoint.py)                                                                                                                                                   | Trace snapshot selection, checkpoint writes, then restoration of optimizer and random-number state.                     |
 | Measure saved updates                    | [load_checkpoint.py](bubbleforce/load_checkpoint.py), [run_analysis.py](bubbleforce/run_analysis.py)                                                                                                                       | Load weights and momentum, prepare validation tokens, then estimate response eigenpairs.                                |
 | Inspect the measured response            | [loss_hessian.py](bubbleforce/analysis/loss_hessian.py), [sharded_hessian.py](bubbleforce/analysis/sharded_hessian.py), [muon_step.py](bubbleforce/analysis/muon_step.py), [muon_jvp.py](bubbleforce/analysis/muon_jvp.py) | Apply the loss Hessian to a direction, then differentiate the saved Muon update along that direction.                   |
-| Inspect numerical stability calculations | [eigensolver.py](bubbleforce/analysis/eigensolver.py), [krylov.py](bubbleforce/analysis/krylov.py), [momentum_stability.py](bubbleforce/analysis/momentum_stability.py)                                                    | Follow eigenvalue estimation separately from the calculation of a stability boundary using fixed momentum coefficients. |
+| Inspect numerical stability calculations | [eigensolver.py](bubbleforce/analysis/eigensolver.py), [krylov.py](bubbleforce/analysis/krylov.py), [compute_bubbleforce.py](bubbleforce/analysis/compute_bubbleforce.py)                                                    | Follow eigenvalue estimation separately from the calculation of a stability boundary using fixed momentum coefficients. |
 | Inspect saved results                    | [logging.py](bubbleforce/logging.py), [tests/](tests/)                                                                                                                                                                     | Trace result writing, then read the corresponding checks before changing behavior.                                      |
 
 
@@ -37,7 +37,7 @@ source .venv/bin/activate                                  # or: python -m venv 
 python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 python -m pip install -r requirements.txt
 python data/cached_fineweb10B.py 20                        # validation shard + 20 training shards
-python run.py nanogpt_muon_baseline --print-settings       # works without data or GPUs
+python3 run.py configs/nanogpt_muon_baseline.yaml --print-settings       # works without data or GPUs
 ```
 
 [requirements.txt](requirements.txt) pins PyTorch 2.11.0. Keep that version: PyTorch 2.10 corrupts one bias gradient under `torch.compile`, and a restart then reaches a non-finite loss at its second update. If you must use 2.10, set `export TORCHINDUCTOR_MIX_ORDER_REDUCTION=0` before starting Python.
@@ -47,10 +47,10 @@ python run.py nanogpt_muon_baseline --print-settings       # works without data 
 Every run has this form:
 
 ```bash
-python run.py EXPERIMENT [key=value ...] [--print-settings]
+python3 run.py CONFIG_PATH [key=value ...] [--print-settings]
 ```
 
-- `EXPERIMENT` picks [configs/EXPERIMENT.yaml](configs/). Each `key=value` replaces one YAML value, using dotted paths (OmegaConf dotlist syntax).
+- `CONFIG_PATH` selects a YAML file, such as `configs/nanogpt_muon_baseline.yaml`. Use an absolute path or a path relative to the working directory. Bare experiment names are no longer supported. Each `key=value` replaces a YAML value, using dotted paths (OmegaConf dotlist syntax).
 - Quote lists so the shell leaves them alone: `'measurement.measured_updates=[2000,2050]'`.
 - `training=null` skips training and only measures snapshots that already exist.
 - Unknown top-level keys are rejected. Nested keys go through the config dataclasses, so a misspelled nested key fails when the config is built.
@@ -72,26 +72,26 @@ python run.py EXPERIMENT [key=value ...] [--print-settings]
 
 ```bash
 # Full run: snapshot every 50 updates (plus the final one), then measure them all
-python run.py nanogpt_muon_baseline measurement.output_dir=runs/spectrum/baseline_trial_1
+python3 run.py configs/nanogpt_muon_baseline.yaml measurement.output_dir=runs/spectrum/baseline_trial_1
 
 # Measure only chosen updates; training stops after update 2050
-python run.py lr_half 'measurement.measured_updates=[2000,2050]' \
+python3 run.py configs/lr_half.yaml 'measurement.measured_updates=[2000,2050]' \
   measurement.output_dir=runs/spectrum/lr_half_pair
 
 # Short pilot that keeps the full 3250-update LR schedule but stops at update 500
-python run.py nanogpt_muon_baseline training.stop_step=500 \
+python3 run.py configs/nanogpt_muon_baseline.yaml training.stop_step=500 \
   measurement.output_dir=runs/spectrum/pilot_500
 
 # Fewer GPUs or less memory: change worker count and microbatch sizes
-python run.py nanogpt_muon_baseline world_size=4 training.microbatch_sequences=32 \
+python3 run.py configs/nanogpt_muon_baseline.yaml world_size=4 training.microbatch_sequences=32 \
   measurement.microbatch_sequences=8 measurement.output_dir=runs/spectrum/four_gpu
 
 # Save restart checkpoints every 500 updates (and at the final boundary)
-python run.py nanogpt_muon_baseline training.checkpoint.every=500 \
+python3 run.py configs/nanogpt_muon_baseline.yaml training.checkpoint.every=500 \
   measurement.output_dir=runs/spectrum/with_checkpoints
 
 # Re-measure a saved snapshot with more validation tokens and a bigger Krylov basis
-python run.py decreased_momentum training=null \
+python3 run.py configs/decreased_momentum.yaml training=null \
   measurement.capture_dir=./decreased_momentum__update_002025 \
   'measurement.measured_updates=[2025]' \
   'measurement.token_counts=[16777216,33554432]' \
@@ -110,7 +110,7 @@ Environment variables:
 
 The experiment YAML supplies every default; override any value as `key=value`. The most useful ones:
 
-- `experiment` [`str`, required]: `nanogpt_muon_baseline`, `maxentslop`, `lr_double`, `lr_half`, `increased_momentum` or `decreased_momentum`.
+- `CONFIG_PATH` [path, required]: Load an experiment YAML, for example `configs/nanogpt_muon_baseline.yaml`. Custom YAML files may be stored outside `configs/`.
 - `--print-settings` [flag]: Print the resolved settings and exit.
 - `world_size` [`int`, default `8`]: Number of GPU workers. Must equal the saved worker count when you load snapshots or restart checkpoints.
 - `measurement.output_dir` [path, default `runs/spectrum/<experiment>`]: New directory for all outputs.
@@ -169,16 +169,16 @@ restarts/<experiment>/<experiment>__checkpoint_<NNNNNN>/                 checkpo
                                                                           training_config.json, CONVERSION.json
 ```
 
-The bucket was made with an older codebase called *muoff*. Its README shows `python -m records.track_3_optimization.run` and `measurement.updates`. **In this repository, use** `python run.py` **and** `measurement.measured_updates`**.** Bucket experiment names map to this repository like this:
+The bucket was made with an older codebase called *muoff*. Its README shows `python -m records.track_3_optimization.run` and `measurement.updates`. **In this repository, use** `python3 run.py CONFIG_PATH` **and** `measurement.measured_updates`**.** Bucket experiment names map to this repository like this:
 
 
 | Bucket experiment                          | Use with `run.py`                                               | Resume overrides (restarts)                                 |
 | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------- |
-| `decreased_momentum`, `increased_momentum` | same name                                                       | `training.train_steps=6475 training.microbatch_sequences=8` |
-| `lr_double`, `lr_half`                     | same name (snapshots only)                                      | —                                                           |
-| `original_implementation`                  | `nanogpt_muon_baseline` (restarts at 1951 and 2801)             | none                                                        |
-| `baseline` (updates 1980–2000)             | `nanogpt_muon_baseline` (snapshots only; shared pre-2009 trunk) | —                                                           |
-| `maxentslop`                               | `maxentslop` (snapshots only; different recipe, see below)      | —                                                           |
+| `decreased_momentum`, `increased_momentum` | `configs/decreased_momentum.yaml`, `configs/increased_momentum.yaml` | `training.train_steps=6475 training.microbatch_sequences=8` |
+| `lr_double`, `lr_half`                     | `configs/lr_double.yaml`, `configs/lr_half.yaml` (snapshots only) | —                                                           |
+| `original_implementation`                  | `configs/nanogpt_muon_baseline.yaml` (restarts at 1951 and 2801)             | none                                                        |
+| `baseline` (updates 1980–2000)             | `configs/nanogpt_muon_baseline.yaml` (snapshots only; shared pre-2009 trunk) | —                                                           |
+| `maxentslop`                               | `configs/maxentslop.yaml` (snapshots only; different recipe, see below)      | —                                                           |
 | `shared_trunk` (checkpoint 2001)           | **cannot resume here**: it stores `protocol_sha256: null`       | —                                                           |
 
 
@@ -199,7 +199,7 @@ Bucket caveats:
 hf buckets sync \
   hf://buckets/jacknzheng/bubbleforce/snapshots/decreased_momentum/decreased_momentum__update_002025 \
   ./decreased_momentum__update_002025
-python run.py decreased_momentum training=null \
+python3 run.py configs/decreased_momentum.yaml training=null \
   measurement.capture_dir=./decreased_momentum__update_002025 \
   'measurement.measured_updates=[2025]' \
   measurement.output_dir=runs/spectrum/decreased_momentum_snapshot2025
@@ -213,7 +213,7 @@ For snapshots from your own run, point `measurement.capture_dir` at that run's `
 hf buckets sync \
   hf://buckets/jacknzheng/bubbleforce/restarts/decreased_momentum/decreased_momentum__checkpoint_002201 \
   ./decreased_momentum__checkpoint_002201                    # about 95 GB
-python run.py decreased_momentum \
+python3 run.py configs/decreased_momentum.yaml \
   training.train_steps=6475 training.microbatch_sequences=8 \
   training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
   'measurement.measured_updates=[2210]' \
@@ -229,7 +229,7 @@ This resumes at update 2201, trains through 2210, and measures 2210. Training da
 | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `output_dir already exists; choose a new one` (run.py)                                                                       | Pass a fresh `measurement.output_dir`.                                                                                                                                                                                                            |
 | `measurement snapshot missing: …/rank<R>/metrics_snapshot_<U>.pt` (run.py)                                                   | `capture_dir` must be the folder that *contains* `rank0/…rank7/`. Also check that the update number and `world_size` match the files.                                                                                                             |
-| `restart recipe differs; use a checkpoint created with this experiment's training recipe` (run.py)                           | Fingerprint mismatch. Apply the resume overrides in the table above, use the right experiment name, and don't change any training hyperparameter. Debug by comparing `python run.py … --print-settings` with the bucket's `training_config.json`. |
+| `restart recipe differs; use a checkpoint created with this experiment's training recipe` (run.py)                           | Fingerprint mismatch. Apply the resume overrides in the table above, use the matching experiment YAML path, and don't change any training hyperparameter. Debug by comparing `python3 run.py CONFIG_PATH --print-settings` with the bucket's `training_config.json`. |
 | `resume requires a schema-3 bundle with the selected process count` (run.py)                                                 | Set `world_size` to the checkpoint's `world_size` (8). Point `resume_checkpoint` at the nested `checkpoint_<NNNNNN>` folder, not its parent.                                                                                                      |
 | `requested updates precede the restart; select later measurement.measured_updates` (run.py)                                  | Checkpoint `N` can only produce updates `≥ N`.                                                                                                                                                                                                    |
 | `measurement updates must precede stop_step and train_steps` (run.py)                                                        | Every measured update must be `< stop_step` (or `< train_steps`).                                                                                                                                                                                 |
@@ -255,7 +255,7 @@ Measured ζ, in call order:
 | [run_analysis.py](bubbleforce/run_analysis.py) | `run_analysis` / `compute_bubbleforce_eigenpairs` drive the measurement of one update. |
 | [load_checkpoint.py](bubbleforce/load_checkpoint.py) | Loads weights, momentum, per-matrix η, weight decay and `c₀`, and the validation tokens. |
 | [loss_hessian.py](bubbleforce/analysis/loss_hessian.py), [sharded_hessian.py](bubbleforce/analysis/sharded_hessian.py), [fixed_lm_head_loss.py](bubbleforce/analysis/fixed_lm_head_loss.py) | Loss-Hessian-vector product `H v` on validation tokens, Muon matrices only. |
-| [muon_step.py](bubbleforce/analysis/muon_step.py) | `compute_muon_response`: turns `H v` into a momentum change and returns the change in the next Muon update. This is the operator whose eigenvalue is ζ. |
+| [muon_step.py](bubbleforce/analysis/muon_step.py) | `compute_optimizer_jvp`: turns `H v` into a momentum change and returns the change in the next Muon update. This is the operator whose eigenvalue is ζ. |
 | [muon_jvp.py](bubbleforce/analysis/muon_jvp.py) | Derivative of the Newton–Schulz step, used by `muon_step.py`. |
 | [eigensolver.py](bubbleforce/analysis/eigensolver.py), [krylov.py](bubbleforce/analysis/krylov.py) | Arnoldi solver: top eigenvalue (measured ζ), stopping reason (`agreement`, `budget`, `span_exhausted`) and residual. |
 | [logging.py](bubbleforce/logging.py) | Writes `eigenvalues.csv` and `measurement_results.json`. |
@@ -265,7 +265,7 @@ Predicted ζ (no model needed):
 | File | Role |
 | ---- | ---- |
 | [run_analysis.py](bubbleforce/run_analysis.py) | `predict_equilibrium`: for each update and Muon group, reads η, weight decay and the momentum kernel; `predicted_zeta = (η·λ_wd + c₀·κ*) / η`. |
-| [momentum_stability.py](bubbleforce/analysis/momentum_stability.py) | `compute_bubbleforce`: finds `κ*`, the largest curvature coupling the frozen kernel tolerates. |
+| [compute_bubbleforce.py](bubbleforce/analysis/compute_bubbleforce.py) | `compute_bubbleforce`: finds `κ*`, the largest curvature coupling the frozen kernel tolerates. |
 | [logging.py](bubbleforce/logging.py) | `write_predicted_equilibrium` writes `predicted_equilibrium.csv`. |
 
 ## Output files and how to read them
@@ -323,4 +323,4 @@ Read these papers in order when interpreting stability measurements:
 5. **Andreyev and Beneventano.** [Edge of Stochastic Stability: Revisiting the Edge of Stability for SGD](https://arxiv.org/abs/2412.20553), with an [author's companion explanation](https://poggio-lab.mit.edu/blogsupdates/edge-of-stochastic-stability-part-ii). Read their experiments using batch sharpness, the expected minibatch curvature along the corresponding minibatch gradient. Compare their measurement procedure with this repository's fixed-validation measurements before interpreting minibatch training behavior.
 6. **Andreyev et al., 2026 preprint.** [Momentum Further Constrains Sharpness at the Edge of Stochastic Stability](https://arxiv.org/abs/2604.14108). Examine their different momentum effects at small and large batch sizes when interpreting the increased- and decreased-momentum experiments. Establish the corresponding Muon analysis before applying their SGD stability thresholds to these runs.
 
-When applying these papers here, first inspect `compute_muon_response` in [muon_step.py](bubbleforce/analysis/muon_step.py). During measurement, the code differentiates the saved normalized Muon update while holding older gradients and Adam parameters fixed. Use this operator definition when comparing measured eigenvalues with a paper's sharpness definition. Evaluate fixed-state stability predictions separately from changes observed along a training run.
+When applying these papers here, first inspect `compute_optimizer_jvp` in [muon_step.py](bubbleforce/analysis/muon_step.py). During measurement, the code differentiates the saved normalized Muon update while holding older gradients and Adam parameters fixed. Use this operator definition when comparing measured eigenvalues with a paper's sharpness definition. Evaluate fixed-state stability predictions separately from changes observed along a training run.

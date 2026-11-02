@@ -1,0 +1,101 @@
+digraph architecture {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.35, ranksep=0.55,
+         fontname="Helvetica", fontsize=16, compound=true, newrank=true];
+  node [shape=box, style="rounded,filled", fillcolor="#EFF6FF", color="#50749A",
+        fontname="Helvetica", fontsize=13, fontcolor="#172B4D", penwidth=1.3,
+        margin="0.16,0.10", target="_blank"];
+  edge [color="#536579", fontname="Helvetica", fontsize=11, fontcolor="#334155",
+        arrowsize=0.7];
+
+  runner [label="run_experiment()", URL="../run.py#L117"];
+  train [label="run_training()", URL="../run.py#L182"];
+  analysis [ordering=out, label="run_analysis()\nLoad a saved update", URL="../bubbleforce/run_analysis.py#L206"];
+  prepare [label="compute_bubbleforce_eigenpairs()\nFind operator Jacobian\neigenvalues and eigenvectors", URL="../bubbleforce/run_analysis.py#L151"];
+  boundary [label="compute_bubbleforce()\nFind the frozen momentum\nstability boundary", URL="../bubbleforce/analysis/compute_bubbleforce.py#L40"];
+
+  train_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FEF3C7", color="#A16207",
+                label="TrainConfig", fontsize=11, URL="../configs/train_config.py#L55"];
+  measurement_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#DBEAFE", color="#2563EB",
+                      label="Measurement\nConfig", fontsize=11, URL="../configs/measurement_config.py#L159"];
+  checkpoint [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#EDE9FE", color="#7C3AED",
+              label="Measurement\nCheckpoint", fontsize=11, URL="../bubbleforce/load_checkpoint.py#L21"];
+
+  { rank=same; train_config; runner; measurement_config; }
+  { rank=same; train; analysis; }
+  train_config -> runner [ style=dotted, label="training settings"];
+  runner -> measurement_config [dir=back, style=dotted, label="measurement settings"];
+  runner -> train [label="optional training"];
+  runner -> analysis [ordering=out, label="via run_measurements()"];
+  train -> analysis [style=dashed, label="saved snapshots", constraint=false];
+  checkpoint -> prepare [style=dotted, label="saved model and momentum"];
+  analysis -> prepare [label="MeasurementConfig"];
+  analysis -> boundary [label="TrainConfig settings from saved recipe\nvia predict_equilibrium()"];
+  { rank=same; checkpoint; prepare; boundary; }
+
+  subgraph cluster_solver {
+    return_mid;
+    return_upper [shape=point, style=invis, width=0, height=0, label="", group="return"];
+    label="Estimate eigenvalues";
+    style="rounded"; color="#CBD5E1"; margin=18;
+    vector_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#CFFAFE", color="#0E7490",
+                   label="ShardedVector\nConfig", fontsize=11, URL="../configs/measurement_config.py#L82"];
+    eigen_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FFE4E6", color="#BE123C",
+                  label="EigenSolve\nConfig", fontsize=11, URL="../configs/measurement_config.py#L14"];
+    solve [label="solve_eigenpairs()", URL="../bubbleforce/analysis/eigensolver.py#L305"];
+    extend [label="extend_krylov_basis()\nApply response to each basis vector", URL="../bubbleforce/analysis/krylov.py#L127"];
+    small [label="solve_hessenberg_eigenpairs()\nSolve the small projected problem", URL="../bubbleforce/analysis/krylov.py#L217"];
+    result [shape=ellipse, style=filled, fillcolor="#F1F5F9", color="#64748B",
+            label="Readouts and eigenvector shards"];
+    { rank=same; vector_config; eigen_config; }
+    vector_config -> solve [style=dotted, label="checkpoint.vector_config"];
+    eigen_config -> solve [style=dotted, label="config.eigensolver"];
+    solve -> extend;
+    extend -> small [label="Hessenberg matrix"];
+    small -> result [style=dashed, label="solve_eigenpairs(): check convergence,\nreconstruct vectors, evaluate residuals"];
+  }
+
+  subgraph cluster_response {
+    label="Apply the optimizer operator Jacobian";
+    style="rounded"; color="#CBD5E1"; margin=18;
+    response [label="compute_optimizer_jvp()", fillcolor="#DCFCE7", color="#15803D",
+              URL="../bubbleforce/analysis/muon_step.py#L62"];
+    hessian [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#D1FAE5", color="#047857",
+             label="LossHessian", fontsize=11, URL="../bubbleforce/analysis/loss_hessian.py#L11"];
+    hvp [label="compute_distributed_hvp()\nApply the loss Hessian to the direction",
+         URL="../bubbleforce/analysis/sharded_hessian.py#L12"];
+    step_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#FFEDD5", color="#C2410C",
+                 label="MuonStep\nConfig", fontsize=11, URL="../configs/measurement_config.py#L60"];
+    response_vector_config [shape=triangle, style=filled, fixedsize=true, width=2.0, height=0.95, fillcolor="#CFFAFE", color="#0E7490",
+                            label="ShardedVector\nConfig", fontsize=11, URL="../configs/measurement_config.py#L82"];
+    negative [label="compute_negative_update_jvp()\nScale the gradient response per matrix",
+              URL="../bubbleforce/analysis/muon_step.py#L14"];
+    ns [label="compute_newton_schulz_jvp()\nDifferentiate the matrix update",
+        URL="../bubbleforce/analysis/muon_jvp.py#L12"];
+    { rank=same; hessian; step_config; response_vector_config; }
+    hessian -> response [style=dotted, label="loss Hessian"];
+    step_config -> response [style=dotted, label="per-matrix settings"];
+    response_vector_config -> response [style=dotted, label="parameter assignments,\nvector sizes and padding"];
+    response -> hvp [label="Krylov basis vector\n(this GPU's shard)"];
+    hvp -> negative [label="Hessian-vector product"];
+    negative -> ns [label="momentum and its response"];
+    response:e -> ns:e [dir=back, style=dashed, label="scale, add weight decay,\npack response shard", weight=0];
+  }
+
+  prepare -> solve;
+  prepare -> vector_config [style=invis];
+  prepare -> eigen_config [style=invis];
+  { rank=same; vector_config; eigen_config; hessian; }
+  { rank=same; extend; response; }
+  { rank=same; small; hvp; }
+  extend:ne -> response:nw [label="Krylov basis vector\n(this GPU's shard)", constraint=false];
+  response:sw -> extend:se [style=dashed, label="Operator Jacobian-vector product\n(this GPU's shard)", constraint=false];
+
+  return_mid [group="return", shape=plaintext, style="", label="Return readouts and\neigenvector shards", fontsize=11];
+  { rank=same; return_mid; extend; response; }
+  return_mid -> extend [style=invis, weight=1000];
+  result:w -> return_mid:s [style=dashed, arrowhead=none, constraint=false];
+  { rank=same; return_upper; vector_config; eigen_config; }
+  return_upper -> eigen_config [style=invis, weight=1000];
+  return_upper -> return_mid:n [style=dashed, dir=none, weight=1000];
+  return_upper -> prepare:w [style=dashed, constraint=false];
+}

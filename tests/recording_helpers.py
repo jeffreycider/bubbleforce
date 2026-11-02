@@ -15,7 +15,7 @@ class Model(torch.nn.Module):
         self.head = torch.nn.Linear(2, 1, bias=False)
 
 
-def configuration(root, name="muon", beta=0.95):
+def configuration(root, beta=0.95):
     quantities = [
         "weights",
         "gradients",
@@ -32,7 +32,7 @@ def configuration(root, name="muon", beta=0.95):
         optimizer_groups=[
             dict(
                 pattern=r"blocks\.weight",
-                optimizer=name,
+                optimizer="muon",
                 hyperparams=dict(momentum=dict(kind="ema", decay=beta), lr=0.02),
             ),
             dict(

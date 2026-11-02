@@ -61,25 +61,19 @@ class MuonStepConfig:
     """Configure a matrix's Muon step at a saved training update.
 
     Attributes:
-        optimizer: Optimizer variant: "muon" or "muonh".
         learning_rate: Learning rate at this update.
-        weight_decay: Decoupled decay coefficient; zero for MuonH.
+        weight_decay: Decoupled decay coefficient.
         current_gradient_coefficient: Lag-zero kernel coefficient c0 after any
             normalization over the available gradient history.
         training_batch_tokens: Token count converting validation-mean gradient
             changes to the training-sum gradient convention.
     """
-    optimizer: Literal["muon", "muonh"]
     learning_rate: float
     weight_decay: float
     current_gradient_coefficient: float
     training_batch_tokens: int
 
     def __post_init__(self) -> None:
-        if self.optimizer not in ("muon", "muonh"):
-            raise ValueError("expected Muon or MuonH")
-        if self.optimizer == "muonh" and self.weight_decay != 0:
-            raise ValueError("MuonH requires zero weight decay")
         if self.learning_rate <= 0:
             raise ValueError("normalized displacement requires a positive learning rate")
 

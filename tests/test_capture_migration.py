@@ -61,7 +61,7 @@ def bundle(tmp_path, steps=4):
 
 
 def test_experiment_records_requested_updates_with_its_optimizer_settings():
-    training, measurement, world_size = prepare_experiment("maxentslop", ["measurement.measured_updates=[10,11,12]"])
+    training, measurement, world_size = prepare_experiment("configs/maxentslop.yaml", ["measurement.measured_updates=[10,11,12]"])
     config = dict(training.to_training_dict(), capture_dir=str(measurement.capture_dir),
                   require_world_size=world_size)
     assert config["require_world_size"] == 8
@@ -86,9 +86,8 @@ def test_resume_fingerprint_ignores_restore_hook_but_binds_numeric_hook_values()
     assert training_config_fingerprint(changed) != training_config_fingerprint(restored)
 
 
-@pytest.mark.parametrize("name", ["muon", "muonh"])
-def test_snapshot_records_actual_update_not_weights(tmp_path, name):
-    cfg = configuration(tmp_path, name)
+def test_snapshot_records_actual_update_not_weights(tmp_path):
+    cfg = configuration(tmp_path)
     state = state_for(cfg)
     recording = Recording(cfg)
     recording.setup(state)

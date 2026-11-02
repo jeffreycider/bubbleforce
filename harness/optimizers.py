@@ -6,7 +6,7 @@ from typing import Any, Protocol
 import torch
 from torch import nn
 
-from optimizers import Muon, MuonH
+from optimizers import Muon
 from optimizers.ringed.momentum.config import momentum_scheduler
 
 
@@ -37,13 +37,6 @@ def _build_muon(named_parameters: list[tuple[str, nn.Parameter]], *,
         {"momentum": momentum})
 
 
-def _build_muonh(named_parameters: list[tuple[str, nn.Parameter]], *,
-                 momentum: dict[str, Any], **hyperparameters: Any) -> torch.optim.Optimizer:
-    return _store_scheduler_config_hash(
-        MuonH([p for _, p in named_parameters], momentum_scheduler(momentum), **hyperparameters),
-        {"momentum": momentum})
-
-
 def _build_adamw(named_parameters: list[tuple[str, nn.Parameter]], *, lr: float, weight_decay: float,
                  betas: tuple[float, float] = (0.8, 0.95), eps: float = 1e-10,
                  fused: bool = True) -> torch.optim.Optimizer:
@@ -54,7 +47,6 @@ def _build_adamw(named_parameters: list[tuple[str, nn.Parameter]], *, lr: float,
 
 optimizer_registry: dict[str, OptimizerBuilder] = {
     "muon": _build_muon,
-    "muonh": _build_muonh,
     "adamw": _build_adamw,
 }
 

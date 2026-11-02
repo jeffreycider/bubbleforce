@@ -10,7 +10,7 @@ import run
 from bubbleforce import run_analysis as analysis
 from bubbleforce.load_checkpoint import (
     load_checkpoint_for_analysis, load_validation_token_batch,
-    load_model_from_checkpoint, load_initial_eigenvector,
+    load_initial_eigenvector,
 )
 from bubbleforce.run_analysis import run_analysis, compute_bubbleforce_eigenpairs
 from configs.measurement_config import EigenSolveConfig, MeasurementConfig, ShardedVectorConfig
@@ -73,14 +73,34 @@ def make_gpt_capture(tmp_path):
 def test_load_snapshot_recovers_optimizer_and_parameter_assignments(tmp_path):
     config = make_gpt_capture(tmp_path)
     checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
+    snapshot = torch.load(checkpoint.paths[0], weights_only=True)
+    assert checkpoint.update == 2
+    assert not checkpoint.model.training
+    torch.testing.assert_close(
+        checkpoint.model.state_dict(),
+        {**snapshot['model_before'], **snapshot['buffers']},
+        rtol=0, atol=0,
+    )
     assert len(checkpoint.momenta) == 6
     assert set(checkpoint.momenta) == set(checkpoint.vector_config.parameter_names)
     assert all(value.current_gradient_coefficient == pytest.approx(.1) for value in checkpoint.step_configs.values())
     with pytest.raises(ValueError, match='update differs'):
         replacement = checkpoint.paths[0].with_suffix('.replacement.pt')
-        torch.save(dict(checkpoint.snapshot, update=3), replacement)
+        torch.save(dict(snapshot, update=3), replacement)
         replacement.replace(checkpoint.paths[0])
         load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
+
+
+def test_load_snapshot_rejects_muonh(tmp_path):
+    config = make_gpt_capture(tmp_path)
+    path = config.capture_dir / 'rank0' / 'metrics_snapshot_000002.pt'
+    snapshot = torch.load(path, weights_only=True)
+    for group in snapshot['settings']:
+        if group['optimizer'] == 'muon':
+            group['optimizer'] = 'muonh'
+    torch.save(snapshot, path)
+    with pytest.raises(ValueError, match='snapshot does not identify one Muon optimizer'):
+        load_checkpoint_for_analysis(config.capture_dir, 2, 0, 1, torch.device('cpu'))
 
 
 def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
@@ -209,11 +229,15 @@ def test_compute_bubbleforce_without_logging(tmp_path, symmetric):
     config = make_gpt_capture(tmp_path)
     config = replace(config, eigensolver=replace(config.eigensolver, symmetric=symmetric))
     checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
-    model = load_model_from_checkpoint(checkpoint)
+    weights_before = {
+        name: value.detach().clone()
+        for name, value in checkpoint.model.state_dict().items()
+    }
     validation_batch = load_validation_token_batch(
         config.validation, 2, rank=0, world_size=1, device=torch.device('cpu'), sequence_length=2,
     )
-    measurement, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, model, validation_batch, 2)
+    measurement, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, validation_batch, 2)
+    torch.testing.assert_close(checkpoint.model.state_dict(), weights_before, rtol=0, atol=0)
     assert measurement['readouts'][-1]['eigenvalues']
     assert len(eigenvectors) == 1
     assert not config.output_dir.exists()
