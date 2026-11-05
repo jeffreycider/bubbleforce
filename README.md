@@ -108,5 +108,3 @@ python3 run.py configs/increased_momentum.yaml \
 ## Codebase architecture
 
 ![Software architecture diagram](figures/architecture-excalidraw.svg)
-
-Edit [architecture.excalidraw](architecture.excalidraw), then export it as `figures/architecture-excalidraw.svg`.
