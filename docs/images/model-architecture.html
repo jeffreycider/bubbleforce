@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>nanoGPT model</title><style>html,body{margin:0;width:1200px;height:1820px;background:white}svg{display:block}</style>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1820" viewBox="0 0 1200 1820" role="img" aria-labelledby="title desc">
+<title id="title">nanoGPT model</title>
+<desc id="desc">Twelve pre-normalized decoder blocks with six causal attention heads, partial rotary positions, squared ReLU feed-forward layers, residual additions, and next-token cross-entropy loss.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#171717"/></marker></defs>
+<style>text { font-family: Arial; fill: #171717; } .wire { fill: none; stroke: #171717; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; } .box { stroke: #171717; stroke-width: 3.5; }</style>
+<rect width="1200" height="1820" fill="white"/>
+<text x="600" y="76" font-size="48" font-weight="700" text-anchor="middle">nanoGPT model</text>
+<text x="600" y="123" font-size="27" font-weight="400" text-anchor="middle">Decoder-only Transformer · 12 layers · width 768</text>
+<text x="480" y="187" font-size="27" font-weight="700" text-anchor="middle">Training loss</text>
+<rect class="box" x="295" y="235" width="370" height="80" rx="15" fill="#d2ebd1"/>
+<text x="480" y="284.0" font-size="26" font-weight="700" text-anchor="middle">Cross-entropy loss</text>
+<rect class="box" x="295" y="360" width="370" height="90" rx="15" fill="#e2dcf4"/>
+<text x="480" y="399.0" font-size="26" font-weight="700" text-anchor="middle">Logit softcap</text>
+<text x="480" y="429.0" font-size="22" font-weight="400" text-anchor="middle">Bound magnitude below 15</text>
+<rect class="box" x="295" y="495" width="370" height="90" rx="15" fill="#e2dcf4"/>
+<text x="480" y="534.0" font-size="26" font-weight="700" text-anchor="middle">Vocabulary projection</text>
+<text x="480" y="564.0" font-size="22" font-weight="400" text-anchor="middle">768 → 50,304</text>
+<rect class="box" x="295" y="630" width="370" height="70" rx="15" fill="#fbf3bc"/>
+<text x="480" y="674.0" font-size="26" font-weight="700" text-anchor="middle">Final RMSNorm</text>
+<path class="wire" d="M 480 235 V 202" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 360 V 315" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 495 V 450" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 630 V 585" marker-end="url(#arrow)"/>
+<text x="830" y="283" font-size="25" font-weight="700" text-anchor="start">Next-token targets</text>
+<path class="wire" d="M 809 275 H 665" marker-end="url(#arrow)"/>
+<rect class="box" x="180" y="735" width="560" height="715" rx="24" fill="#f4f4f4"/>
+<text x="207" y="778" font-size="27" font-weight="700" text-anchor="start">Decoder block</text>
+<text x="207" y="812" font-size="23" font-weight="400" text-anchor="start">Repeat 12 times</text>
+<path class="wire" d="M 480 804 V 700" marker-end="url(#arrow)"/>
+<circle cx="480" cy="830" r="26" fill="white" stroke="#171717" stroke-width="3.5"/>
+<path class="wire" d="M 468 830 H 492 M 480 818 V 842"/>
+<rect class="box" x="295" y="885" width="370" height="110" rx="15" fill="#c7e8f5"/>
+<text x="480" y="919.0" font-size="26" font-weight="700" text-anchor="middle">Feed-forward</text>
+<text x="480" y="949.0" font-size="22" font-weight="400" text-anchor="middle">768 → 3,072 → 768</text>
+<text x="480" y="979.0" font-size="22" font-weight="400" text-anchor="middle">Squared ReLU</text>
+<rect class="box" x="295" y="1035" width="370" height="65" rx="15" fill="#fbf3bc"/>
+<text x="480" y="1076.5" font-size="26" font-weight="700" text-anchor="middle">RMSNorm</text>
+<circle cx="480" cy="1160" r="26" fill="white" stroke="#171717" stroke-width="3.5"/>
+<path class="wire" d="M 468 1160 H 492 M 480 1148 V 1172"/>
+<rect class="box" x="295" y="1215" width="370" height="100" rx="15" fill="#ffe2bb"/>
+<text x="480" y="1259.0" font-size="26" font-weight="700" text-anchor="middle">Causal self-attention</text>
+<text x="480" y="1289.0" font-size="22" font-weight="400" text-anchor="middle">6 heads · 128 dimensions per head</text>
+<rect class="box" x="295" y="1355" width="370" height="65" rx="15" fill="#fbf3bc"/>
+<text x="480" y="1396.5" font-size="26" font-weight="700" text-anchor="middle">RMSNorm</text>
+<path class="wire" d="M 480 885 V 856" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1035 V 995" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1134 V 1100" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1215 V 1186" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1355 V 1315" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1485 V 1420" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1120 H 255 Q 240 1120 240 1105 V 845 Q 240 830 255 830 H 454" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1435 H 255 Q 240 1435 240 1420 V 1175 Q 240 1160 255 1160 H 454" marker-end="url(#arrow)"/>
+<circle cx="480" cy="1120" r="5" fill="#171717"/>
+<circle cx="480" cy="1435" r="5" fill="#171717"/>
+<path d="M 665 1265 L 790 1215" fill="none" stroke="#b96923" stroke-width="2.5"/>
+<rect x="790" y="1105" width="370" height="257" rx="16" fill="#fff0de" stroke="#b96923" stroke-width="2.5"/>
+<text x="813" y="1148" font-size="26" font-weight="700" text-anchor="start">Inside attention</text>
+<text x="813" y="1185" font-size="20" font-weight="400" text-anchor="start">Q, K, V projections</text>
+<text x="813" y="1220" font-size="20" font-weight="400" text-anchor="start">RMSNorm on Q and K</text>
+<text x="813" y="1255" font-size="20" font-weight="400" text-anchor="start">Partial rotary positions on Q and K</text>
+<text x="813" y="1290" font-size="20" font-weight="400" text-anchor="start">Causal attention · scale 0.12</text>
+<text x="813" y="1325" font-size="20" font-weight="400" text-anchor="start">Output projection</text>
+<rect class="box" x="295" y="1485" width="370" height="65" rx="15" fill="#fbf3bc"/>
+<text x="480" y="1526.5" font-size="26" font-weight="700" text-anchor="middle">RMSNorm</text>
+<rect class="box" x="295" y="1595" width="370" height="90" rx="15" fill="#f9dfe2"/>
+<text x="480" y="1634.0" font-size="26" font-weight="700" text-anchor="middle">Token embedding</text>
+<text x="480" y="1664.0" font-size="22" font-weight="400" text-anchor="middle">50,304 → 768</text>
+<path class="wire" d="M 480 1595 V 1550" marker-end="url(#arrow)"/>
+<path class="wire" d="M 480 1730 V 1685" marker-end="url(#arrow)"/>
+<text x="480" y="1763" font-size="27" font-weight="700" text-anchor="middle">Input tokens</text>
+<text x="480" y="1797" font-size="22" font-weight="400" text-anchor="middle">1,024 tokens per sequence</text>
+</svg>
+
+</html>

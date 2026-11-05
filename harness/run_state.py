@@ -28,6 +28,7 @@ class NanoGPTRunState:
     step: int = -1  # Zero-based current update; checkpoint N restores N - 1.
     setup_finished: bool = False
     training_time: float = 0.0
+    train_loss: float = float("nan")
     clock_start: float = 0.0
     capture_root: Path | None = None
     gradient_references: dict[int, dict[str, Any]] = field(default_factory=dict)

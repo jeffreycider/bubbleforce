@@ -70,16 +70,16 @@ class TrainConfig:
     model: dict[str, int]
     train_steps: int
     stop_step: int | None
-    setup: list[dict[str, Any]]
-    pre_optimizer: list[dict[str, Any]]
-    post_optimizer: list[dict[str, Any]]
-    teardown: list[dict[str, Any]]
     wandb_offline: bool
     initialization: dict[str, Any]
     seed_offset: int
     reseed_before_initialization: bool
     checkpoint: dict[str, Any]
     metrics_snapshot: dict[str, Any]
+    setup: list[dict[str, Any]] | None = None
+    pre_optimizer: list[dict[str, Any]] | None = None
+    post_optimizer: list[dict[str, Any]] | None = None
+    teardown: list[dict[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         repository = Path(__file__).resolve().parents[1]
@@ -87,6 +87,22 @@ class TrainConfig:
             value = getattr(self, name)
             if value is not None:
                 setattr(self, name, str((repository / value).resolve()))
+        # The fixed training checklist; order matters (e.g. optimizer before checkpoint restore).
+        if self.setup is None:
+            self.setup = [{"name": name} for name in (
+                "open_rank_zero_log", "load_validation_tokens", "build_compiled_gpt",
+                "seed_then_initialize_parameters", "assemble_grouped_optimizer", "restore_checkpoint",
+                "open_training_batches", "broadcast_initial_parameters", "validate_at_step_boundaries",
+            )]
+        if self.pre_optimizer is None:
+            self.pre_optimizer = [{"name": "schedule_optimizer_groups"}]
+        if self.post_optimizer is None:
+            self.post_optimizer = [
+                {"name": "print_training_progress"},
+                {"name": "validate_at_step_boundaries", "hyperparams": {"every": 125, "final_tenth_every": 25}},
+            ]
+        if self.teardown is None:
+            self.teardown = [{"name": "mark_log_finished"}]
         if type(self.train_steps) is not int or self.train_steps < 1:
             raise ValueError("train_steps must be a positive integer")
         if self.stop_step is not None and (

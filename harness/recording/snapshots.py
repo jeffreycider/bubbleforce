@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,7 +70,7 @@ class Recording:
         if not self.enabled:
             return
         config = self.config
-        root = os.environ.get("CAPTURE_ROOT") or config.get("capture_dir")
+        root = config.get("capture_dir")
         self.writer = CaptureWriter(root or Path(config["output_dir"]) / "recording", run_state.rank)
         use_capture_directory(run_state, self.writer)
         if run_state.rank == 0:
@@ -104,7 +103,7 @@ class Recording:
             if isinstance(optimizer, Muon)
         ]
         if len(muon_groups) != 1 or len(muon_groups[0].param_groups) != 1:
-            raise ValueError("metrics snapshots require one single-group Muon/MuonH")
+            raise ValueError("metrics snapshots require one single-group Muon")
         optimizer = self.optimizer = muon_groups[0]
         self.muon_parameters = {
             self.names[id(p)]: p for p in optimizer.param_groups[0]["params"]

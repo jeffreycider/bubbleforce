@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Callable
 import os
+import re
 import time
 import torch
 import torch.distributed as dist
@@ -10,7 +11,9 @@ except ModuleNotFoundError:
     wandb = None
 from harness.schedules import learning_rate_factor
 from harness.checkpoint import load_checkpoint
-from harness.optimizers import GroupedOptimizers
+from harness import determinism_policy
+from harness.optimizers import GroupedOptimizers, optimizer_registry
+from harness.recording.snapshots import Recording
 from harness.data_fineweb import distributed_data_generator
 from harness.model_gpt import GPT, initialize_parameters_like_record
 from harness.run_state import Config, Hook, NanoGPTRunState
@@ -238,15 +241,16 @@ def validate_at_step_boundaries(*, every: int = 0, final_tenth_every: int = 0,
 
 
 def print_training_progress(*, every: int = 1) -> Hook:
-    """Print completed updates, elapsed training time and mean update duration to the console."""
+    """Log completed updates, mean training loss and elapsed training time."""
     def hook(config: Config, state: NanoGPTRunState) -> None:
         step = state.step
         if every and step % every == 0:
             approx_training_time = state.training_time + (time.perf_counter() - state.clock_start)
             state.print_log(f"step:{step+1}/{config['train_steps']}"
+                               + f" train_loss:{state.train_loss:.5f}"
                                + f" train_time:{approx_training_time:.3f}s"
                                + f" step_avg:{1000*approx_training_time/(step + 1 - config.get('start_step', 0)):.2f}ms",
-                               console=True, log=False)
+                               console=True)
     return hook
 
 
@@ -255,9 +259,33 @@ def inject(hooks: list[Hook], config: Config, state: NanoGPTRunState) -> None:
     for hook in hooks:
         hook(config, state)
 
-def hook_factories() -> dict[str, Callable[..., Hook]]:
-    """The supported YAML hook names and their concrete factories."""
-    return {
+
+def check_optimizer_groups_resolve(config: Config) -> None:
+    """Check optimizer patterns and construct optimizers on meta tensors before CUDA setup."""
+    for row in config['optimizer_groups']:
+        re.compile(row['pattern'])
+        parameter = torch.nn.Parameter(torch.empty(2, 2, device='meta'))
+        optimizer_registry[row['optimizer']]([('blocks.0.mlp.fc.weight', parameter)],
+                                             **row.get('hyperparams', {}))
+
+
+def prepare_training(config: Config) -> tuple[dict[str, list[Hook]], Recording]:
+    """Check training settings, build hooks and recording policies, apply determinism before CUDA setup."""
+    if config.get("loop") != "gpt_record":
+        raise SystemExit("this runner requires loop: gpt_record")
+    check_optimizer_groups_resolve(config)
+    if any(
+        setting_name in config
+        for setting_name in ("capture", "resume_anchor", "checkpoint_every", "checkpoint_dir")
+    ):
+        raise ValueError("use metrics_snapshot, checkpoint, capture_dir and resume_checkpoint")
+    if config.get("resume_checkpoint"):
+        setup = [entry["name"] for entry in config.get("setup", [])]
+        required = ["assemble_grouped_optimizer", "restore_checkpoint", "open_training_batches"]
+        if (any(name not in setup for name in required)
+                or not setup.index(required[0]) < setup.index(required[1]) < setup.index(required[2])):
+            raise ValueError("resume requires restoring the assembled optimizer before opening training data")
+    factories: dict[str, Callable[..., Hook]] = {
         "open_rank_zero_log": open_rank_zero_log,
         "load_validation_tokens": load_validation_tokens,
         "build_compiled_gpt": build_compiled_gpt,
@@ -272,19 +300,14 @@ def hook_factories() -> dict[str, Callable[..., Hook]]:
         "validate_at_step_boundaries": validate_at_step_boundaries,
         "print_training_progress": print_training_progress,
     }
-
-def bind_sites(config: Config) -> dict[str, list[Hook]]:
-    if config.get("resume_checkpoint"):
-        setup = [entry["name"] for entry in config.get("setup", [])]
-        required = ["assemble_grouped_optimizer", "restore_checkpoint", "open_training_batches"]
-        if (any(name not in setup for name in required)
-                or not setup.index(required[0]) < setup.index(required[1]) < setup.index(required[2])):
-            raise ValueError("resume requires restoring the assembled optimizer before opening training data")
-    factories = hook_factories()
     unknown = sorted({entry["name"] for site in SITES for entry in config.get(site, [])
                       if entry["name"] not in factories})
     if unknown:
         raise ValueError(f"unsupported selected lifecycle hooks: {unknown}")
     hooks = {site: [factories[entry["name"]](**entry.get("hyperparams", {}))
                     for entry in config.get(site, [])] for site in SITES}
-    return hooks
+    recording = Recording(config)
+    if config.get("determinism") or os.environ.get("CAPTURE_DETERMINISM") == "1":
+        determinism_policy.apply()
+        determinism_policy.verify(require_launch_env=True)
+    return hooks, recording

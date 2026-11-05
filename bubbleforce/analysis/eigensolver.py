@@ -9,7 +9,6 @@ eigenpair count.
 """
 
 from collections.abc import Callable
-from copy import deepcopy
 from enum import Enum
 from typing import NotRequired, TypedDict
 
@@ -22,7 +21,9 @@ from bubbleforce.analysis.krylov import (
     initialize_krylov_basis,
     solve_hessenberg_eigenpairs,
 )
-from bubbleforce.analysis.sharded_vector import compute_global_norm
+from bubbleforce.analysis.sharded_vector import (
+    ShardedKrylovBasisVector, ShardedVector, compute_global_norm,
+)
 
 
 class StoppingReason(Enum):
@@ -105,7 +106,7 @@ def _are_hessenberg_eigenspaces_in_agreement(
     )
     smallest_cosine = np.clip(principal_angle_cosines.min(), 0.0, 1.0)
     largest_angle_sine = np.sqrt(1.0 - smallest_cosine**2)
-    return bool(largest_angle_sine <= eigensolve_config.subspace_tolerance)
+    return bool(largest_angle_sine <= eigensolve_config.subspace_tol)
 
 
 def _are_hessenberg_eigenvalues_in_agreement(
@@ -205,7 +206,7 @@ def _evaluate_eigensolver_stopping_conditions(
 
 
 def compute_relative_eigenpair_residuals(
-    matrix_vector_product: Callable[[torch.Tensor], torch.Tensor],
+    matrix_vector_product: Callable[[ShardedVector], ShardedVector],
     sharded_vector_config: ShardedVectorConfig,
     estimated_eigenvalues: np.ndarray,
     estimated_eigenvectors: torch.Tensor,
@@ -260,7 +261,7 @@ def compute_relative_eigenpair_residuals(
 
 def reconstruct_eigenvectors(
     sharded_vector_config: ShardedVectorConfig,
-    krylov_basis_vectors: list[torch.Tensor],
+    krylov_basis_vectors: list[ShardedKrylovBasisVector],
     hessenberg_eigenvectors: np.ndarray,
 ) -> torch.Tensor:
     """Reconstruct eigenvector shards from the selected Hessenberg eigenvectors.
@@ -303,12 +304,11 @@ def reconstruct_eigenvectors(
 
 
 def solve_eigenpairs( # check other PRs
-    matrix_vector_product: Callable[[torch.Tensor], torch.Tensor],
+    matrix_vector_product: Callable[[ShardedVector], ShardedVector],
     sharded_vector_config: ShardedVectorConfig,
     eigensolve_config: EigenSolveConfig,
     *,
-    initial_basis_vector: torch.Tensor | None = None,
-    save_readouts: Callable[[EigenpairReadout], None] | None = None,
+    initial_basis_vector: ShardedVector | None = None,
 ) -> tuple[list[EigenpairReadout], torch.Tensor]:
     """Estimate the largest positive real eigenpairs of a linear operator.
 
@@ -330,8 +330,6 @@ def solve_eigenpairs( # check other PRs
         initial_basis_vector: Optional local starting shard, shape
             (n_local_params,). Normalize globally; otherwise draw
             a random start using eigensolve_config.start_seed.
-        save_readouts: Optional callback receiving a copy of each checkpoint
-            readout before final residual evaluation.
 
     Returns:
         Return the checkpoint readouts in order and the final eigenvector
@@ -360,7 +358,7 @@ def solve_eigenpairs( # check other PRs
             krylov_basis_vectors,
             extended_hessenberg_matrix,
             target_krylov_basis_size,
-            breakdown_rtol=eigensolve_config.breakdown_rtol,
+            span_exhaustion_tol=eigensolve_config.span_exhaustion_tol,
             krylov_basis_exhausted=krylov_basis_exhausted,
         )
 
@@ -386,8 +384,6 @@ def solve_eigenpairs( # check other PRs
                 target_krylov_basis_size == krylov_basis_vector_counts[-1]
             ),
         )
-        if save_readouts is not None:
-            save_readouts(deepcopy(eigenpair_readout))
         eigenpair_readouts.append(eigenpair_readout)
         previous_hessenberg_eigenvectors = selected_hessenberg_eigenvectors
         if eigenpair_readout["stopping_reason"] is not None:

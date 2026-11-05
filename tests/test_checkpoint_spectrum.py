@@ -1,6 +1,7 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+import sys
 
 import numpy as np
 import pytest
@@ -10,7 +11,7 @@ import run
 from bubbleforce import run_analysis as analysis
 from bubbleforce.load_checkpoint import (
     load_checkpoint_for_analysis, load_validation_token_batch,
-    load_model_from_checkpoint, load_initial_eigenvector,
+    load_initial_eigenvector,
 )
 from bubbleforce.run_analysis import run_analysis, compute_bubbleforce_eigenpairs
 from configs.measurement_config import EigenSolveConfig, MeasurementConfig, ShardedVectorConfig
@@ -50,7 +51,7 @@ def make_gpt_capture(tmp_path):
                     buffers=dict(model.named_buffers()), post_insertion_prepolar_momentum=momenta,
                     training_batch_tokens=8,
                     settings=[dict(pattern=pattern, optimizer='muon', groups=[dict(lr=.025, weight_decay=.05)])])
-    recipe = dict(train_steps=4, optimizer_groups=[dict(
+    recipe = dict(train_steps=4, batch_tokens=8, optimizer_groups=[dict(
         pattern=pattern, optimizer='muon',
         lr_schedule=dict(kind='piecewise_constant', boundaries=[], factors=[1.]),
         hyperparams=dict(lr=.025, weight_decay=.05, momentum=dict(kind='ema', decay=.9)),
@@ -62,7 +63,7 @@ def make_gpt_capture(tmp_path):
     validation = tmp_path / 'validation.bin'
     write_tokens(validation)
     return MeasurementConfig(
-        validation=validation, output_dir=tmp_path / 'result', capture_dir=tmp_path / 'capture', updates=(2,), measure_every=250,
+        validation=validation, output_dir=tmp_path / 'result', capture_dir=tmp_path / 'capture', measured_updates=(2,), measure_every=250,
         token_counts=(2,), microbatch_sequences=1, sequence_length=2,
         hvp_mode='trace', gemm_precision='fp32', matmul_precision='highest', cpu_threads=1,
         warm_start=None, reuse_previous_vector=False,
@@ -72,40 +73,57 @@ def make_gpt_capture(tmp_path):
 
 def test_load_snapshot_recovers_optimizer_and_parameter_assignments(tmp_path):
     config = make_gpt_capture(tmp_path)
-    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
+    snapshot = torch.load(checkpoint.paths[0], weights_only=True)
+    assert checkpoint.update == 2
+    assert not checkpoint.model.training
+    torch.testing.assert_close(
+        checkpoint.model.state_dict(),
+        {**snapshot['model_before'], **snapshot['buffers']},
+        rtol=0, atol=0,
+    )
     assert len(checkpoint.momenta) == 6
     assert set(checkpoint.momenta) == set(checkpoint.vector_config.parameter_names)
     assert all(value.current_gradient_coefficient == pytest.approx(.1) for value in checkpoint.step_configs.values())
     with pytest.raises(ValueError, match='update differs'):
-        torch.save(dict(checkpoint.snapshot, update=3), checkpoint.paths[0])
-        load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+        replacement = checkpoint.paths[0].with_suffix('.replacement.pt')
+        torch.save(dict(snapshot, update=3), replacement)
+        replacement.replace(checkpoint.paths[0])
+        load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
+
+
+def test_load_snapshot_rejects_muonh(tmp_path):
+    config = make_gpt_capture(tmp_path)
+    path = config.capture_dir / 'rank0' / 'metrics_snapshot_000002.pt'
+    snapshot = torch.load(path, weights_only=True)
+    for group in snapshot['settings']:
+        if group['optimizer'] == 'muon':
+            group['optimizer'] = 'muonh'
+    torch.save(snapshot, path)
+    with pytest.raises(ValueError, match='snapshot does not identify one Muon optimizer'):
+        load_checkpoint_for_analysis(config.capture_dir, 2, 0, 1, torch.device('cpu'))
 
 
 def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
     config = make_gpt_capture(tmp_path)
-    result = run_analysis(config, update=2, output=config.output_dir / "spectra" / "update_000002")
-    saved = json.loads((config.output_dir / 'spectra' / 'update_000002' / 'measurement_results.json').read_text())
-    assert saved['stage'] == 'complete'
-    assert saved['operator'] == 'restoring-response'
-    assert 'config' not in saved
-    assert {entry['path'] for entry in saved['inputs']} == {
-        str(config.validation), str((tmp_path / 'capture') / 'capture_config.json'),
-        str((tmp_path / 'capture') / 'rank0' / 'metrics_snapshot_000002.pt'),
-    }
+    result = run_analysis(config, update=2, output=config.output_dir / "bubbleforce" / "2")
+    saved = json.loads((config.output_dir / 'bubbleforce' / '2' / 'measurement_results.json').read_text())
+    assert set(saved) == {'update', 'measurements'}
+    assert saved['measurements'][0]['tokens'] == result[0]['tokens']
+    assert saved['measurements'][0]['readouts'][-1]['eigenvalues'] == result[0]['readouts'][-1]['eigenvalues']
     assert saved['update'] == 2
-    assert saved['output'] == str(config.output_dir / 'spectra' / 'update_000002')
     assert result[0]['readouts'][-1]['residuals']
-    assert (config.output_dir / 'spectra' / 'update_000002' / 'eigenvalues.csv').read_text().count('\n') >= 2
-    vectors = torch.load(config.output_dir / 'spectra' / 'update_000002' / 'eigenvectors_N2_rank0.pt', weights_only=True)
+    assert (config.output_dir / 'bubbleforce' / '2' / 'eigenvalues.csv').read_text().count('\n') >= 2
+    vectors = torch.load(config.output_dir / 'bubbleforce' / '2' / 'eigenvectors_N2_rank0.pt', weights_only=True)
     assert vectors.ndim == 2 and len(vectors) == 1
     with pytest.raises(FileExistsError, match='new output directory'):
-        run_analysis(config, update=2, output=config.output_dir / "spectra" / "update_000002")
+        run_analysis(config, update=2, output=config.output_dir / "bubbleforce" / "2")
 
 
 def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
     config = make_gpt_capture(tmp_path)
-    config = replace(config, token_counts=(4,), updates=(2, 3), reuse_previous_vector=True)
+    config = replace(config, token_counts=(4,), measured_updates=(2, 3), reuse_previous_vector=True)
     path = (tmp_path / 'capture') / 'rank0' / 'metrics_snapshot_000002.pt'
     snapshot = torch.load(path, weights_only=True)
     names = sorted(snapshot['post_insertion_prepolar_momentum'])
@@ -120,23 +138,16 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
         torch.save(owned, folder / 'metrics_snapshot_000002.pt')
         torch.save(dict(owned, update=3), folder / 'metrics_snapshot_000003.pt')
     with pytest.raises(ValueError, match='every hidden matrix'):
-        load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
+        load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
     run.run_experiment(None, config, 2)
     assert not list(config.output_dir.rglob('*.yaml'))
-    for update in config.updates:
-        output = config.output_dir / 'spectra' / f'update_{update:06d}'
+    for update in config.measured_updates:
+        output = config.output_dir / 'bubbleforce' / str(update)
         saved = json.loads((output / 'measurement_results.json').read_text())
-        assert saved['stage'] == 'complete'
-        assert saved['world_size'] == 2
+        assert set(saved) == {'update', 'measurements'}
         assert saved['update'] == update
-        assert 'config' not in saved
-        assert len(saved['inputs']) == (4 if update == 2 else 6)
-        previous = config.output_dir / 'spectra' / 'update_000002'
-        assert saved['warm_start'] == (None if update == 2 else str(previous))
-        if update == 3:
-            assert {str(previous / f'current_vector_rank{rank}.pt') for rank in range(2)} <= {
-                entry['path'] for entry in saved['inputs']
-            }
+        assert saved['measurements'][0]['tokens'] == 4
+        assert saved['measurements'][0]['readouts'][-1]['residuals']
         norms = []
         for rank in range(2):
             vectors = torch.load(output / f'eigenvectors_N4_rank{rank}.pt', weights_only=True)
@@ -149,20 +160,20 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
 def test_measurement_config_rejects_invalid_updates(tmp_path, updates):
     config = make_gpt_capture(tmp_path)
     with pytest.raises(ValueError, match='updates must be'):
-        replace(config, updates=updates)
+        replace(config, measured_updates=updates)
 
 
 def test_measurement_post_init_selects_updates_and_resolves_paths(tmp_path, monkeypatch):
     config = make_gpt_capture(tmp_path)
     monkeypatch.chdir(tmp_path)
-    resolved = replace(config, updates=None, measure_every=3, end_step=8,
+    resolved = replace(config, measured_updates=None, measure_every=3, end_step=8,
                        capture_dir='captures', output_dir='results', warm_start='vectors')
     repository = Path(analysis.__file__).resolve().parents[1]
-    assert resolved.updates == (0, 3, 6, 7)
+    assert resolved.measured_updates == (0, 3, 6, 7)
     assert resolved.capture_dir == repository / 'captures'
     assert resolved.output_dir == repository / 'results'
     assert resolved.warm_start == repository / 'vectors'
-    assert replace(config, updates=(3, 2)).updates == (2, 3)
+    assert replace(config, measured_updates=(3, 2)).measured_updates == (2, 3)
 
 
 @pytest.mark.parametrize('interval', [0, -1, True, 1.5])
@@ -173,23 +184,31 @@ def test_measurement_post_init_rejects_invalid_frequency(tmp_path, interval):
 
 
 @pytest.mark.parametrize('reuse_previous_vector', [False, True])
-def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatch, reuse_previous_vector):
+@pytest.mark.parametrize('from_cli', [False, True])
+def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatch, reuse_previous_vector, from_cli):
     config = replace(
-        make_gpt_capture(tmp_path), updates=(2, 3),
+        make_gpt_capture(tmp_path), measured_updates=(2, 3),
         warm_start=tmp_path / 'initial_vector', reuse_previous_vector=reuse_previous_vector,
     )
     calls = []
     def record_measurement(shared_config, **arguments):
         calls.append((shared_config, arguments))
+        return [dict(readouts=[dict(eigenvalues=[1.])])]
     monkeypatch.setattr(analysis, 'run_analysis', record_measurement)
-    analysis.run_measurements(config)
+    if from_cli:
+        config_path = tmp_path / 'measurement.yaml'
+        config_path.write_text(json.dumps(config.to_dict()))
+        monkeypatch.setattr(sys, 'argv', ['run_analysis', str(config_path)])
+        analysis.main()
+    else:
+        analysis.main(config)
     assert len(calls) == 2
     assert calls[0][0] is calls[1][0]
     assert calls[0][0].to_dict() == config.to_dict()
-    for index, update in enumerate(config.updates):
+    for index, update in enumerate(config.measured_updates):
         assert calls[index][1] == dict(
-            update=update, output=config.output_dir / 'spectra' / f'update_{update:06d}',
-            warm_start=(config.output_dir / 'spectra' / 'update_000002'
+            update=update, output=config.output_dir / 'bubbleforce' / str(update),
+            warm_start=(config.output_dir / 'bubbleforce' / '2'
                         if index and reuse_previous_vector else config.warm_start),
         )
 
@@ -206,13 +225,17 @@ def test_compute_bubbleforce_without_logging(tmp_path, symmetric):
 
     config = make_gpt_capture(tmp_path)
     config = replace(config, eigensolver=replace(config.eigensolver, symmetric=symmetric))
-    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.updates[0], 0, 1, torch.device('cpu'))
-    model = load_model_from_checkpoint(checkpoint)
+    checkpoint = load_checkpoint_for_analysis((tmp_path / 'capture'), config.measured_updates[0], 0, 1, torch.device('cpu'))
+    weights_before = {
+        name: value.detach().clone()
+        for name, value in checkpoint.model.state_dict().items()
+    }
     validation_batch = load_validation_token_batch(
         config.validation, 2, rank=0, world_size=1, device=torch.device('cpu'), sequence_length=2,
     )
-    measurement, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, model, validation_batch, 2)
-    assert measurement['readouts'][-1]['eigenvalues']
+    readouts, eigenvectors = compute_bubbleforce_eigenpairs(config, checkpoint, validation_batch, 2)
+    torch.testing.assert_close(checkpoint.model.state_dict(), weights_before, rtol=0, atol=0)
+    assert readouts[-1]['eigenvalues']
     assert len(eigenvectors) == 1
     assert not config.output_dir.exists()
 
@@ -221,9 +244,42 @@ def test_load_initial_eigenvector_checks_saved_layout(tmp_path):
 
     layout = ShardedVectorConfig([[('weight', (2, 3))]])
     assert load_initial_eigenvector(None, layout) is None
+    with pytest.raises(FileNotFoundError):
+        load_initial_eigenvector(tmp_path, layout)
     vector = torch.arange(6, dtype=torch.float32)
     torch.save(vector, tmp_path / 'current_vector_rank0.pt')
     torch.testing.assert_close(load_initial_eigenvector(tmp_path, layout), vector)
     torch.save(vector[:3], tmp_path / 'current_vector_rank0.pt')
     with pytest.raises(ValueError, match='vector size'):
         load_initial_eigenvector(tmp_path, layout)
+
+
+@pytest.mark.parametrize("earlier_eigenpair", [False, True])
+def test_empty_final_solve_uses_random_start_at_next_update(
+    tmp_path, monkeypatch, earlier_eigenpair,
+):
+    from bubbleforce.analysis.eigensolver import solve_eigenpairs
+
+    config = make_gpt_capture(tmp_path)
+    config = replace(config, measured_updates=(2, 3), token_counts=(2, 4), reuse_previous_vector=True)
+    source = config.capture_dir / "rank0" / "metrics_snapshot_000002.pt"
+    snapshot = torch.load(source, weights_only=True)
+    torch.save(dict(snapshot, update=3), source.with_name("metrics_snapshot_000003.pt"))
+    starts = []
+
+    def solve_known_operator(config, checkpoint, batch, tokens, initial_vector=None):
+        starts.append((checkpoint.update, tokens, initial_vector is None))
+        sign = 1. if earlier_eigenpair and tokens == 2 else -1.
+        return solve_eigenpairs(
+            lambda vector: sign * vector, checkpoint.vector_config, config.eigensolver,
+            initial_basis_vector=initial_vector,
+        )
+
+    monkeypatch.setattr(analysis, "compute_bubbleforce_eigenpairs", solve_known_operator)
+    analysis.main(config)
+    assert (3, 2, True) in starts
+    for update in config.measured_updates:
+        output = config.output_dir / "bubbleforce" / str(update)
+        saved = json.loads((output / "measurement_results.json").read_text())
+        assert saved["measurements"][-1]["readouts"][-1]["eigenvalues"] == []
+        assert (output / "current_vector_rank0.pt").is_file() == earlier_eigenpair

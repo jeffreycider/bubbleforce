@@ -1,9 +1,10 @@
 numpy
+matplotlib
 PyYAML
 omegaconf==2.3.0
 wandb
 tqdm
-torch==2.10
+torch==2.11.0
 huggingface-hub
 kernels
 setuptools

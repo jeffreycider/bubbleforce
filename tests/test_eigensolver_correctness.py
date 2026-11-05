@@ -41,7 +41,7 @@ def test_projection_matches_explicit_matrix_products(dtype, symmetric, scale):
             basis_vectors,
             projected_matrix,
             num_krylov_basis_vectors,
-            breakdown_rtol=1e-12,
+            span_exhaustion_tol=1e-12,
             krylov_basis_exhausted=basis_extension_complete,
         )
         basis = torch.stack(basis_vectors).T
@@ -183,7 +183,7 @@ def test_exhausted_projection_retains_its_result_without_more_products(symmetric
             basis_vectors,
             projected_matrix,
             6,
-            breakdown_rtol=1e-12,
+            span_exhaustion_tol=1e-12,
             krylov_basis_exhausted=basis_extension_complete,
         )
         assert basis_extension_complete

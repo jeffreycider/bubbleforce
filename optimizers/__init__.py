@@ -1,3 +1,3 @@
-from optimizers.ringed.muon import Muon, MuonH
+from optimizers.ringed.muon import Muon
 
-__all__ = ["Muon", "MuonH"]
+__all__ = ["Muon"]

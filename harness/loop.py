@@ -10,19 +10,24 @@ from harness.run_state import Config, Hook, NanoGPTRunState
 
 
 def accumulate_global_gradient(model: nn.Module, batch: tuple[Tensor, Tensor],
-                               microbatch_sequences: int) -> None:
-    """Accumulate token-summed microbatch gradients, then SUM-reduce them across ranks."""
+                               microbatch_sequences: int) -> Tensor:
+    """Sum gradients across ranks and return the global mean loss per token."""
     inputs, targets = batch
     assert len(inputs) % microbatch_sequences == 0
+    loss_and_tokens = torch.zeros(2, dtype=torch.float64, device=targets.device)
+    loss_and_tokens[1] = targets.numel()
     for i in range(len(inputs) // microbatch_sequences):
         loss = model(inputs[i*microbatch_sequences:(i+1)*microbatch_sequences],
                      targets[i*microbatch_sequences:(i+1)*microbatch_sequences])
         if not torch.isfinite(loss):
             raise RuntimeError("non-finite training loss")
+        loss_and_tokens[0] += loss.detach().double()
         loss.backward()
     for name, p in model.named_parameters():
         assert p.grad is not None, name
         dist.all_reduce(p.grad, op=dist.ReduceOp.SUM)
+    dist.all_reduce(loss_and_tokens, op=dist.ReduceOp.SUM)
+    return loss_and_tokens[0] / loss_and_tokens[1]
 
 
 def run(config: Config, hooks: dict[str, list[Hook]], recording: Recording) -> None:
@@ -55,8 +60,9 @@ def run(config: Config, hooks: dict[str, list[Hook]], recording: Recording) -> N
         run_state.step = step
         inject(hooks["pre_forward"], config, run_state)
         batch = next(run_state.train_batches)
-        accumulate_global_gradient(run_state.model, batch,
-                                   config["microbatch_sequences"])
+        run_state.train_loss = accumulate_global_gradient(
+            run_state.model, batch, config["microbatch_sequences"],
+        ).item()
         inject(hooks["pre_optimizer"], config, run_state)
         recording.before_optimizer(run_state)
         run_state.optimizer.step()

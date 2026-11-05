@@ -4,10 +4,10 @@ from collections.abc import Callable
 
 import numpy as np
 import torch
-from torch import Tensor
 
 from configs.measurement_config import ShardedVectorConfig
 from bubbleforce.analysis.sharded_vector import (
+    ShardedKrylovBasisVector, ShardedVector,
     compute_global_dot, compute_global_norm, get_random_sharded_unit_vector,
 )
 
@@ -92,8 +92,8 @@ def initialize_krylov_basis(
     sharded_vector_config: "ShardedVectorConfig",
     start_seed: int,
     *,
-    initial_basis_vector: Tensor | None = None,
-) -> tuple[list[Tensor], np.ndarray]:
+    initial_basis_vector: ShardedVector | None = None,
+) -> tuple[list[ShardedKrylovBasisVector], np.ndarray]:
     """Normalize the starting vector and initialize the empty Hessenberg matrix.
 
     Args:
@@ -125,21 +125,21 @@ def initialize_krylov_basis(
 
 
 def extend_krylov_basis(
-    matrix_vector_product: Callable[[Tensor], Tensor],
+    matrix_vector_product: Callable[[ShardedVector], ShardedVector],
     sharded_vector_config: ShardedVectorConfig,
-    krylov_basis_vectors: list[Tensor],
+    krylov_basis_vectors: list[ShardedKrylovBasisVector],
     extended_hessenberg_matrix: np.ndarray,
     target_krylov_basis_size: int,
     *,
-    breakdown_rtol: float,
+    span_exhaustion_tol: float,
     krylov_basis_exhausted: bool = False,
-) -> tuple[list[Tensor], np.ndarray, bool]:
+) -> tuple[list[ShardedKrylovBasisVector], np.ndarray, bool]:
     """Extend the Krylov basis and Hessenberg matrix to the requested size.
 
     For each product A @ q_m, remove its components along the basis in
     two passes. Append the coefficients and remaining norm to the matrix.
     Append the normalized remainder to the basis unless its norm is at
-    most max(breakdown_rtol, m * eps) * norm(A @ q_m), or m equals the
+    most max(span_exhaustion_tol, m * eps) * norm(A @ q_m), or m equals the
     global unpadded dimension. Here eps is the dtype's machine precision.
 
     Args:
@@ -149,7 +149,7 @@ def extend_krylov_basis(
             vectors to the copy. Read existing tensors without changing them.
         extended_hessenberg_matrix: Extend the existing matrix, shape (m + 1, m).
         target_krylov_basis_size: Process up to this total number of columns.
-        breakdown_rtol: Set the relative threshold for the remaining norm.
+        span_exhaustion_tol: Set the relative threshold for the remaining norm.
         krylov_basis_exhausted: Skip extension if an earlier call stopped.
 
     Returns:
@@ -197,7 +197,7 @@ def extend_krylov_basis(
             num_basis_vectors * torch.finfo(sharded_vector_config.dtype).eps
         )
         stopping_threshold = (
-            max(breakdown_rtol, roundoff_rtol) * matrix_product_norm
+            max(span_exhaustion_tol, roundoff_rtol) * matrix_product_norm
         )
         num_parameters = sum(sharded_vector_config.parameter_counts_by_rank)
         krylov_basis_exhausted = (

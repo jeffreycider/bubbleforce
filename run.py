@@ -1,11 +1,11 @@
-"""Train a named experiment and measure snapshots, or measure an existing capture."""
+"""Load an experiment YAML to train and measure snapshots, or measure an existing capture."""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime
 from dataclasses import asdict
-from enum import Enum
 import glob
 import json
 import os
@@ -18,105 +18,128 @@ import torch
 import torch.distributed as dist
 from torch.distributed.launcher.api import LaunchConfig, elastic_launch
 
-from bubbleforce.logging import write_scheduled_bubbleforce
-from bubbleforce.run_analysis import predict_bubbleforce, run_measurements
-from harness import determinism_policy, loop
+from bubbleforce.run_analysis import main as run_bubbleforce_analysis, predict_bubbleforce
+from harness import loop
 from harness.checkpoint import training_config_fingerprint
-from harness.hooks import bind_sites
-from harness.optimizers import check_optimizer_groups_resolve
-from harness.recording.snapshots import Recording
+from harness.hooks import prepare_training
 from harness.recording.store import get_formatted_path_to_capture_file
 from configs.measurement_config import MeasurementConfig
 from configs.train_config import TrainConfig
 
 
-class Experiment(str, Enum):
-    original_implementation = "original_implementation"
-    increased_momentum = "increased_momentum"
-    decreased_momentum = "decreased_momentum"
-    lr_half = "lr_half"
-    lr_double = "lr_double"
-    maxentslop = "maxentslop"
-
-
 def prepare_experiment(
-    experiment_name: Experiment | str, config_overrides: list[str] | None = None,
+    experiment_config_path: Path | str, config_overrides: list[str] | None = None,
 ) -> tuple[TrainConfig | None, MeasurementConfig, int]:
-    """Merge experiment settings and overrides, resolve paths and updates, validate configs."""
-    experiment_config_path = Path(__file__).parent / "configs" / f"{Experiment(experiment_name).value}.yaml"
-    if any("=" not in override_argument for override_argument in config_overrides or []):
-        raise ValueError("experiment overrides must use key=value")
-    merged_experiment_config = OmegaConf.merge(
+    """Merge an experiment YAML with CLI arg overrides and build the training and measurement configs.
+
+    Args:
+        experiment_config_path: Load YAML from this absolute path or path relative to the working directory.
+        config_overrides: CLI key=value settings that replace YAML values.
+
+    Returns:
+        The training config (None for measurement-only runs), the measurement
+        config, and the number of worker processes.
+    """
+    experiment_config = OmegaConf.to_container(OmegaConf.merge(
         OmegaConf.load(experiment_config_path),
         OmegaConf.from_dotlist(config_overrides or []),
-    )
-    if unknown_experiment_settings := set(merged_experiment_config) - {"world_size", "training", "measurement"}:
-        raise ValueError(f"unknown experiment settings: {sorted(unknown_experiment_settings)}")
-    experiment_config = OmegaConf.to_container(merged_experiment_config, resolve=True)
-    world_size = experiment_config["world_size"]
-    if type(world_size) is not int or world_size < 1:
-        raise ValueError("world_size must be a positive integer")
+    ), resolve=True) # merge the configs
     training_config = (
         TrainConfig(**experiment_config["training"])
         if experiment_config["training"] is not None else None
     )
-    training_step_limit = (
-        (training_config.stop_step or training_config.train_steps)
-        if training_config is not None else None
-    )
     measurement_config = MeasurementConfig.from_dict(
-        experiment_config["measurement"], end_step=training_step_limit,
+        experiment_config["measurement"],
+        end_step=(training_config.stop_step or training_config.train_steps) if training_config is not None else None,
     )
+    check_experiment_config(experiment_config, training_config, measurement_config)
     if training_config is not None:
-        if measurement_config.updates[-1] >= training_step_limit:
-            raise ValueError("measurement updates must precede stop_step and train_steps")
-        if experiment_config["measurement"]["updates"] is not None and training_config.stop_step is None:
-            training_config.stop_step = measurement_config.updates[-1] + 1
-        training_config.metrics_snapshot["steps"] = list(measurement_config.updates)
-    if any(
-        token_count % (experiment_config["world_size"] * measurement_config.sequence_length)
-        for token_count in measurement_config.token_counts
-    ):
-        raise ValueError("token_counts must provide whole validation sequences on every rank")
+        if experiment_config["measurement"]["measured_updates"] is not None and training_config.stop_step is None:
+            training_config.stop_step = measurement_config.measured_updates[-1] + 1
+        training_config.metrics_snapshot["steps"] = list(measurement_config.measured_updates)
     return training_config, measurement_config, experiment_config["world_size"]
+
+
+def check_experiment_config(
+    experiment_config: dict, training_config: TrainConfig | None, measurement_config: MeasurementConfig,
+) -> None:
+    """Check the training and measurement configs to ensure that they don't contradict each other.
+
+    Args:
+        experiment_config: Merged experiment settings as a plain dict.
+        training_config: Built training config, or None for measurement-only runs.
+        measurement_config: Built measurement config.
+
+    Raises:
+        ValueError: If a top-level setting is unknown or invalid, or if the
+            training and measurement settings disagree.
+    """
+    if unknown_experiment_settings := set(experiment_config) - {"world_size", "training", "measurement"}:
+        raise ValueError(f"unknown experiment settings: {sorted(unknown_experiment_settings)}")
+    world_size = experiment_config["world_size"]
+    if type(world_size) is not int or world_size < 1:
+        raise ValueError("world_size must be a positive integer")
+    if training_config is not None and measurement_config.measured_updates[-1] >= (training_config.stop_step or training_config.train_steps):
+        raise ValueError("measurement updates must precede stop_step and train_steps")
+    if any(token_count % (world_size * measurement_config.sequence_length) for token_count in measurement_config.token_counts):
+        raise ValueError("token_counts must provide whole validation sequences on every rank")
+
+
+def check_experiment_checkpoint_config(
+    training_config: TrainConfig, measurement_config: MeasurementConfig, world_size: int,
+) -> None:
+    """Check that the restart checkpoint config fits this experiment's config before any worker starts.
+
+    Args:
+        training_config: Training config whose resume_checkpoint is set.
+        measurement_config: Measurement config whose updates must follow the restart.
+        world_size: Number of worker processes for this run.
+
+    Raises:
+        ValueError: If the checkpoint has the wrong format or process count, starts
+            after the first requested update, or was made with a different training recipe.
+    """
+    training_settings = training_config.to_training_dict()
+    training_settings.update(
+        capture_dir=str(measurement_config.capture_dir), require_world_size=world_size,
+    )
+    checkpoint_metadata = json.loads(
+        (Path(training_config.resume_checkpoint) / "COMPLETE.json").read_text(),
+    )
+    if checkpoint_metadata.get("format") != 3 or checkpoint_metadata["world_size"] != world_size:
+        raise ValueError("resume requires a schema-3 bundle with the selected process count")
+    if measurement_config.measured_updates[0] < checkpoint_metadata["boundary"]:
+        raise ValueError("requested updates precede the restart; select later measurement.measured_updates")
+    if checkpoint_metadata["protocol_sha256"] != training_config_fingerprint(training_settings):
+        raise ValueError("restart recipe differs; use a checkpoint created with this experiment's training recipe")
 
 
 def run_experiment(
     training_config: TrainConfig | None, measurement_config: MeasurementConfig, world_size: int,
 ) -> None:
     """Check input files and pass config objects directly to distributed workers."""
+    if measurement_config.output_dir.exists():
+        raise FileExistsError(f"output_dir already exists; choose a new one: {measurement_config.output_dir}")
     if type(world_size) is not int or world_size < 1:
         raise ValueError("world_size must be a positive integer")
     repository_root = Path(__file__).resolve().parent
+
+    # check configs are aligned
     if training_config is not None and training_config.resume_checkpoint:
-        training_settings = training_config.to_training_dict()
-        training_settings.update(
-            capture_dir=str(measurement_config.capture_dir), require_world_size=world_size,
-        )
-        checkpoint_metadata = json.loads(
-            (Path(training_config.resume_checkpoint) / "COMPLETE.json").read_text(),
-        )
-        if checkpoint_metadata.get("format") != 3 or checkpoint_metadata["world_size"] != world_size:
-            raise ValueError("resume requires a schema-3 bundle with the selected process count")
-        if measurement_config.updates[0] < checkpoint_metadata["boundary"]:
-            raise ValueError("requested updates precede the restart; select later measurement.updates")
-        if checkpoint_metadata["protocol_sha256"] != training_config_fingerprint(training_settings):
-            raise ValueError("restart recipe differs; use a checkpoint created with this experiment's training recipe")
+        check_experiment_checkpoint_config(training_config, measurement_config, world_size)
     if not measurement_config.validation.is_file():
         raise FileNotFoundError(f"validation shard missing: {measurement_config.validation}")
     if training_config is not None:
         if not glob.glob(str(repository_root / training_config.train_data)):
             raise FileNotFoundError(f"training shards missing: {training_config.train_data}")
     else:
-        for measurement_update in measurement_config.updates:
+        for measurement_update in measurement_config.measured_updates:
             for worker_rank in range(world_size):
                 snapshot_path = get_formatted_path_to_capture_file(
                     measurement_config.capture_dir, worker_rank, "metrics_snapshot", measurement_update,
                 )
                 if not snapshot_path.is_file():
                     raise FileNotFoundError(f"measurement snapshot missing: {snapshot_path}")
-    if os.environ.get("CAPTURE_ROOT"):
-        raise ValueError("unset CAPTURE_ROOT so training uses measurement.capture_dir")
     measurement_config.output_dir.mkdir(parents=True, exist_ok=False)
     distributed_launch_config = LaunchConfig(
         min_nodes=1, max_nodes=1, nproc_per_node=world_size,
@@ -128,17 +151,17 @@ def run_experiment(
         elastic_launch(distributed_launch_config, run_training)(
             training_config, measurement_config.capture_dir, world_size,
         )
-    write_prediction_curve(
+    save_predicted_bubbleforce(
         training_config, capture_dir=measurement_config.capture_dir,
         output_dir=measurement_config.output_dir,
     )
-    elastic_launch(distributed_launch_config, run_measurements)(measurement_config)
+    elastic_launch(distributed_launch_config, run_bubbleforce_analysis)(measurement_config)
 
 
-def write_prediction_curve(
+def save_predicted_bubbleforce(
     training_config: TrainConfig | None, *, capture_dir: Path, output_dir: Path,
 ) -> None:
-    """Use current or saved training settings to predict stability at each update."""
+    """Use current or saved training settings to predict bubbleforce at each update."""
     if training_config is None:
         saved_training_config_path = capture_dir / "capture_config.json"
         if not saved_training_config_path.is_file():
@@ -147,8 +170,13 @@ def write_prediction_curve(
         training_settings = json.loads(saved_training_config_path.read_text())
     else:
         training_settings = training_config.to_training_dict()
-    print("Computing scheduled stability predictions for every training update.", flush=True)
-    write_scheduled_bubbleforce(output_dir, predict_bubbleforce(training_settings))
+    print("Computing bubbleforce predictions for every training update.", flush=True)
+    temporary = output_dir / "predicted_equilibrium.csv.tmp"
+    with temporary.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=("update", "predicted_zeta"))
+        writer.writeheader()
+        writer.writerows(predict_bubbleforce(training_settings))
+    temporary.replace(output_dir / "predicted_equilibrium.csv")
 
 
 def dist_timeout():
@@ -164,20 +192,7 @@ def run_training(training_config: TrainConfig, capture_dir: Path, world_size: in
     if training_settings.get("resume_checkpoint"):
         checkpoint_metadata_path = Path(training_settings["resume_checkpoint"]) / "COMPLETE.json"
         training_settings["start_step"] = json.loads(checkpoint_metadata_path.read_text())["boundary"]
-    if training_settings.get("loop") != "gpt_record":
-        raise SystemExit("this runner requires loop: gpt_record")
-    check_optimizer_groups_resolve(training_settings)
-    if any(
-        setting_name in training_settings
-        for setting_name in ("capture", "resume_anchor", "checkpoint_every", "checkpoint_dir")
-    ):
-        raise ValueError("use metrics_snapshot, checkpoint, capture_dir and resume_checkpoint")
-    training_hooks = bind_sites(training_settings)
-    training_recording = Recording(training_settings)  # resolve both policies once, before CUDA
-
-    if training_settings.get("determinism") or os.environ.get("CAPTURE_DETERMINISM") == "1":
-        determinism_policy.apply()
-        determinism_policy.verify(require_launch_env=True)
+    training_hooks, training_recording = prepare_training(training_settings)
 
     worker_device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
     torch.cuda.set_device(worker_device)
@@ -188,17 +203,29 @@ def run_training(training_config: TrainConfig, capture_dir: Path, world_size: in
 
 
 def main() -> None:
+    def key_value_override(override: str) -> str:
+        if "=" not in override:
+            raise argparse.ArgumentTypeError("experiment overrides must use key=value")
+        return override
+
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
-        "experiment", choices=[experiment_option.value for experiment_option in Experiment],
+        "experiment_config_path", type=Path, metavar="CONFIG_PATH",
+        help="path to an experiment YAML, e.g. configs/nanogpt_muon_baseline.yaml",
     )
-    argument_parser.add_argument("overrides", nargs="*", metavar="key=value")
+    argument_parser.add_argument("overrides", nargs="*", metavar="key=value", type=key_value_override)
     argument_parser.add_argument(
         "--print-settings", action="store_true", help="print merged settings without running workers",
     )
     cli_arguments = argument_parser.parse_args()
+    if not cli_arguments.experiment_config_path.is_file():
+        argument_parser.error(
+            f"experiment config not found: {cli_arguments.experiment_config_path}. "
+            "Pass a YAML file path, e.g. configs/nanogpt_muon_baseline.yaml; "
+            "bare experiment names are no longer supported."
+        )
     training_config, measurement_config, world_size = prepare_experiment(
-        cli_arguments.experiment, cli_arguments.overrides,
+        cli_arguments.experiment_config_path, cli_arguments.overrides,
     )
     if cli_arguments.print_settings:
         print(OmegaConf.to_yaml(dict(

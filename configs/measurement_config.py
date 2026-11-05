@@ -22,11 +22,11 @@ class EigenSolveConfig:
         eigenvalue_rtol: Maximum relative range across the comparison window.
             For each sorted eigenvalue position, divide its range by its
             largest absolute value; require every position to pass.
-        subspace_tolerance: Maximum sine of the largest principal angle between
+        subspace_tol: Maximum sine of the largest principal angle between
             successive selected eigenvector spans. Apply when requesting
             multiple eigenpairs. Zero means identical spans; one means at
             least one direction is orthogonal to the other span.
-        breakdown_rtol: Stop basis extension when the component outside the
+        span_exhaustion_tol: Stop basis extension when the component outside the
             Krylov span is this small relative to the original matrix-vector
             product.
         symmetric: Use a symmetric projected eigensolve for a symmetric operator.
@@ -37,8 +37,8 @@ class EigenSolveConfig:
     krylov_basis_vector_counts: tuple[int, ...] = (8, 16, 24, 32, 48, 64, 96, 128)
     comparison_window: int = 2
     eigenvalue_rtol: float = 0.001
-    subspace_tolerance: float = 0.01
-    breakdown_rtol: float = 1e-12
+    subspace_tol: float = 0.01
+    span_exhaustion_tol: float = 1e-12
     symmetric: bool = False
     start_seed: int = 921
 
@@ -52,8 +52,8 @@ class EigenSolveConfig:
             )
         if self.comparison_window < 2:
             raise ValueError("comparison_window must be at least 2")
-        if not isfinite(self.breakdown_rtol) or self.breakdown_rtol < 0:
-            raise ValueError("breakdown_rtol must be finite and nonnegative")
+        if not isfinite(self.span_exhaustion_tol) or self.span_exhaustion_tol < 0:
+            raise ValueError("span_exhaustion_tol must be finite and nonnegative")
 
 
 @dataclass(frozen=True)
@@ -61,25 +61,19 @@ class MuonStepConfig:
     """Configure a matrix's Muon step at a saved training update.
 
     Attributes:
-        optimizer: Optimizer variant: "muon" or "muonh".
         learning_rate: Learning rate at this update.
-        weight_decay: Decoupled decay coefficient; zero for MuonH.
+        weight_decay: Decoupled decay coefficient.
         current_gradient_coefficient: Lag-zero kernel coefficient c0 after any
             normalization over the available gradient history.
-        training_batch_tokens: Token count converting validation-mean gradient
-            changes to the training-sum gradient convention.
+        training_batch_tokens: Saved training-token count used to divide the
+            decay contribution when measuring the historical response.
     """
-    optimizer: Literal["muon", "muonh"]
     learning_rate: float
     weight_decay: float
     current_gradient_coefficient: float
     training_batch_tokens: int
 
     def __post_init__(self) -> None:
-        if self.optimizer not in ("muon", "muonh"):
-            raise ValueError("expected Muon or MuonH")
-        if self.optimizer == "muonh" and self.weight_decay != 0:
-            raise ValueError("MuonH requires zero weight decay")
         if self.learning_rate <= 0:
             raise ValueError("normalized displacement requires a positive learning rate")
 
@@ -168,7 +162,7 @@ class MeasurementConfig:
     validation: Path
     output_dir: Path
     capture_dir: Path
-    updates: tuple[int, ...] | None
+    measured_updates: tuple[int, ...] | None
     measure_every: int
     token_counts: tuple[int, ...]
     microbatch_sequences: int
@@ -190,17 +184,17 @@ class MeasurementConfig:
                 setattr(self, name, (repository / value).resolve())
         if type(self.measure_every) is not int or self.measure_every < 1:
             raise ValueError("measure_every must be a positive integer")
-        if self.updates is None:
+        if self.measured_updates is None:
             if end_step is None:
-                raise ValueError("measurement-only runs require explicit measurement.updates")
+                raise ValueError("measurement-only runs require explicit measurement.measured_updates")
             if type(end_step) is not int or end_step < 1:
                 raise ValueError("end_step must be a positive integer")
-            self.updates = tuple(sorted(set(range(0, end_step, self.measure_every)) | {end_step - 1}))
-        if (not self.updates
-                or any(type(update) is not int or update < 0 for update in self.updates)
-                or len(self.updates) != len(set(self.updates))):
-            raise ValueError("updates must be nonnegative, distinct integers")
-        self.updates = tuple(sorted(self.updates))
+            self.measured_updates = tuple(sorted(set(range(0, end_step, self.measure_every)) | {end_step - 1}))
+        if (not self.measured_updates
+                or any(type(update) is not int or update < 0 for update in self.measured_updates)
+                or len(self.measured_updates) != len(set(self.measured_updates))):
+            raise ValueError("measured_updates must be nonnegative, distinct integers")
+        self.measured_updates = tuple(sorted(self.measured_updates))
         self.token_counts = tuple(self.token_counts)
         for name in ("microbatch_sequences", "sequence_length", "cpu_threads"):
             if type(getattr(self, name)) is not int or getattr(self, name) < 1:
@@ -231,7 +225,7 @@ class MeasurementConfig:
             if values[name] is not None:
                 values[name] = str(values[name])
         values["token_counts"] = list(self.token_counts)
-        values["updates"] = list(self.updates)
+        values["measured_updates"] = list(self.measured_updates)
         values["eigensolver"]["krylov_basis_vector_counts"] = list(
             self.eigensolver.krylov_basis_vector_counts,
         )
