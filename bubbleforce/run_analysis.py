@@ -1,4 +1,4 @@
-"""Measure historical Muon response eigenpairs from saved training snapshots.
+"""Measure canonical Muon pathspring eigenpairs from saved training snapshots.
 
 Read a measurement YAML file from the command line, load each selected update,
 then save eigenvalue reports and eigenvector shards. Launch with torchrun for
@@ -76,7 +76,7 @@ def predict_bubbleforce(training_config: dict, updates=None):
     """Apply the single Muon group's schedules and yield update/prediction pairs.
 
     Use the available gradient history and actual decay to calculate kappa_star.
-    Yield (kappa_star / learning_rate + weight_decay) / training batch tokens.
+    Yield kappa_star / learning_rate in canonical pathspring units.
     Yield None for a nonpositive learning rate or current-gradient weight.
     Raise ValueError if the group count, update, or kernel is invalid.
     """
@@ -117,10 +117,7 @@ def predict_bubbleforce(training_config: dict, updates=None):
             predicted_bubbleforce = compute_bubbleforce(
                 momentum_kernel.numpy(), decay_step=decay_step,
             )
-            training_tokens = training_config["batch_tokens"]
-            predicted_zeta = (
-                predicted_bubbleforce / learning_rate + weight_decay
-            ) / training_tokens
+            predicted_zeta = predicted_bubbleforce / learning_rate
         yield dict(update=update, predicted_zeta=predicted_zeta)
 
 
@@ -131,10 +128,10 @@ def compute_bubbleforce_eigenpairs(
     token_count: int,
     initial_vector: torch.Tensor | None = None,
 ) -> tuple[list[EigenpairReadout], torch.Tensor]:
-    """Estimate eigenpairs of the historical Muon response.
+    """Estimate eigenpairs of the canonical Muon pathspring operator.
 
-    Apply J_P(M)[H v] + (weight_decay / training batch tokens) v, using
-    validation-mean Hessian products and saved summed-gradient momentum.
+    Apply J_T / c0 using validation-mean Hessian products and the checkpoint's
+    mean-momentum adapter. Exclude the decoupled-decay identity shift.
     Hold older gradients and Adam parameters fixed.
     Clear cached Hessian programs after solving, including on failure.
 
@@ -214,7 +211,9 @@ def run_analysis(
         checkpoint = load_checkpoint_for_analysis(config.capture_dir, update, rank, world_size, device)
         initial_vector = load_initial_eigenvector(warm_start, checkpoint.vector_config)
         prepare_bubbleforce_output_directory(output, rank, world_size)
-        per_update_bubbleforce_measurements = dict(update=update, measurements=[])
+        per_update_bubbleforce_measurements = dict(
+            update=update, operator="canonical_pathspring_v1", measurements=[],
+        )
 
         for token_count in config.token_counts:
             validation_batch = load_validation_token_batch(

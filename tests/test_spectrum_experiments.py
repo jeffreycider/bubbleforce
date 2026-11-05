@@ -455,7 +455,7 @@ def test_zero_learning_rate_records_an_unavailable_prediction():
     assert rows[1]['predicted_zeta'] is None
 
 
-def test_prediction_uses_historical_units_and_actual_decay(monkeypatch):
+def test_prediction_uses_canonical_units_and_actual_decay(monkeypatch):
     from importlib import import_module
     analysis = import_module("bubbleforce.run_analysis")
     training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
@@ -470,15 +470,15 @@ def test_prediction_uses_historical_units_and_actual_decay(monkeypatch):
         return 26.
     monkeypatch.setattr(analysis, 'compute_bubbleforce', boundary)
     result = list(analysis.predict_bubbleforce(training, [1000]))[0]['predicted_zeta']
-    assert result == pytest.approx((26. / .02 + .1) / 8)
+    assert result == pytest.approx(26. / .02)
     kernel, decay_step = calls[0]
     assert decay_step == pytest.approx(.02 * .1)
     assert kernel[0] == pytest.approx(.0975)
     training['batch_tokens'] = 16
-    assert list(analysis.predict_bubbleforce(training, [1000]))[0]['predicted_zeta'] == pytest.approx(result / 2)
+    assert list(analysis.predict_bubbleforce(training, [1000]))[0]['predicted_zeta'] == pytest.approx(result)
 
 
-def test_historical_prediction_matches_plateau_reference():
+def test_canonical_prediction_matches_converted_plateau_reference():
     training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
     group = next(group for group in training['optimizer_groups'] if group['optimizer'] == 'muon')
     group['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[], factors=[1.])
@@ -488,4 +488,6 @@ def test_historical_prediction_matches_plateau_reference():
     )
     training['batch_tokens'] = 524288
     result = list(predict_bubbleforce(training, [2000]))[0]['predicted_zeta']
-    assert result == pytest.approx(0.002050858279960198, rel=1e-10, abs=0.)
+    # Archived prediction r includes a decay shift and training-token denominator.
+    expected = 524288 * 0.002050858279960198 - .05
+    assert result == pytest.approx(expected, rel=1e-10, abs=0.)

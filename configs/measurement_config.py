@@ -65,8 +65,8 @@ class MuonStepConfig:
         weight_decay: Decoupled decay coefficient.
         current_gradient_coefficient: Lag-zero kernel coefficient c0 after any
             normalization over the available gradient history.
-        training_batch_tokens: Saved training-token count used to divide the
-            decay contribution when measuring the historical response.
+        training_batch_tokens: Saved training-token count used by the momentum
+            JVP adapter to convert summed-gradient storage to mean-loss coordinates.
     """
     learning_rate: float
     weight_decay: float

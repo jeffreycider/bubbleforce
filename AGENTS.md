@@ -1,6 +1,6 @@
 # Agent guide
 
-This repository trains nanoGPT with Muon, saves optimizer state at chosen updates, and measures the optimizer's stability at those updates. The measured quantity is bubbleforce, ζ ("zeta"); compare it with predicted ζ, calculated from the stability boundary of the momentum kernel.
+This repository trains nanoGPT with Muon, saves optimizer state at chosen updates, and measures the optimizer's stability at those updates. The measured quantity is pathspring, ζ ("zeta"); compare it with predicted ζ = F/η, where bubbleforce F is the stability boundary of the momentum kernel.
 
 Run every command from the repository root. Read [README.md](README.md) for the experiment story; this file covers how to drive the code, how the numbers are calculated, and how to read them.
 
@@ -273,17 +273,19 @@ This resumes at update 2201, trains through 2210, and measures 2210. Training da
 
 ## How the repository calculates ζ
 
-Measure $\zeta$ by applying the historical response
+Measure $\zeta$ as the largest positive real eigenvalue of the canonical operator
 
-$$R v = J_P(M)[H v] + \frac{\gamma_{\mathrm{wd}}}{N}v,$$
+$$Bv = (J_T/c_0)v = N_{\mathrm{train}}J_P(M_{\mathrm{sum}})[\bar H v].$$
 
-then estimating its largest positive real eigenvalue. Apply the validation-mean Hessian $H$ through the derivative $J_P(M)$ of the scaled Muon transformation $P$ at saved summed-gradient momentum $M$. Use the training-token count $N$ to divide the decay coefficient $\gamma_{\mathrm{wd}}$.
+The Hessian $\bar H$ uses mean loss. `compute_mean_momentum_jvp` adapts the checkpoint's summed-gradient momentum to mean-loss coordinates by scaling the tangent output by the saved training batch token count. Preserve the saved BF16 primals and epsilon; do not renormalize the checkpoint momentum. This storage conversion is the only use of training-token count in the operator. Exclude both the $c_0$ multiplier and the decoupled-decay identity shift.
 
 Calculate the prediction using learning rate $\eta$:
 
-$$\zeta_{\mathrm{pred}} = \frac{\kappa_* / \eta + \gamma_{\mathrm{wd}}}{N}.$$
+$$\zeta_{\mathrm{pred}} = F/\eta = \kappa_*/\eta.$$
 
-Find $\kappa_*$ using the actual momentum kernel and decay step $\eta\gamma_{\mathrm{wd}}$. Divide the prediction by the training-token count to match the historical measurement units. Average the Hessian over the validation tokens separately. Keep the saved momentum and actual kernel coefficients when measuring and predicting.
+Find $\kappa_*$ using the actual momentum kernel and decay step $\eta\gamma_{\mathrm{wd}}$. No token count enters the prediction. Average the Hessian over the validation tokens separately.
+
+Archived plots use a historical response $r$. For uniform decay and the corresponding eigenmode, $\zeta=N_{\mathrm{train}}r-\gamma_{\mathrm{wd}}$; apply the same conversion to archived predictions. Preserve the raw archived observations. A shifted historical positive mode need not remain positive after conversion; canonical pathspring selects positive real modes of $B$.
 
 Measured ζ, in call order:
 
@@ -292,7 +294,7 @@ Measured ζ, in call order:
 | [run_analysis.py](bubbleforce/run_analysis.py) | `run_analysis` / `compute_bubbleforce_eigenpairs` drive the measurement of one update. |
 | [load_checkpoint.py](bubbleforce/load_checkpoint.py) | Loads weights, momentum, per-matrix η, weight decay and `c₀`, and the validation tokens. |
 | [loss_hessian.py](bubbleforce/analysis/loss_hessian.py), [sharded_hessian.py](bubbleforce/analysis/sharded_hessian.py), [fixed_lm_head_loss.py](bubbleforce/analysis/fixed_lm_head_loss.py) | Loss-Hessian-vector product `H v` on validation tokens, Muon matrices only. |
-| [muon_jvp.py](bubbleforce/analysis/muon_jvp.py) | `compute_optimizer_jvp`: passes `H v` through the scaled Newton-Schulz derivative at saved momentum, then adds `(weight_decay / N) v`. Estimate ζ from this historical response. Use `compute_newton_schulz_jvp` for the Newton-Schulz derivative. |
+| [muon_jvp.py](bubbleforce/analysis/muon_jvp.py) | `compute_optimizer_jvp`: passes the mean-loss HVP through `compute_mean_momentum_jvp` and applies matrix-size scaling. The adapter preserves the saved Newton-Schulz primals and converts the derivative to mean-loss coordinates. |
 | [eigensolver.py](bubbleforce/analysis/eigensolver.py), [krylov.py](bubbleforce/analysis/krylov.py) | Arnoldi solver: top eigenvalue (measured ζ), stopping reason (`agreement`, `budget`, `span_exhausted`) and residual. |
 | [logging.py](bubbleforce/logging.py) | Writes `eigenvalues.csv` and `measurement_results.json`. |
 
@@ -300,7 +302,7 @@ Predicted ζ (no model needed):
 
 | File | Role |
 | ---- | ---- |
-| [run_analysis.py](bubbleforce/run_analysis.py) | `predict_bubbleforce`: for the single Muon group at each update, reads η, weight decay and the momentum kernel; `predicted_zeta = (κ* / η + weight_decay) / N`, using the training-token count N. |
+| [run_analysis.py](bubbleforce/run_analysis.py) | `predict_bubbleforce`: for the single Muon group at each update, reads η, weight decay and the momentum kernel; `predicted_zeta = κ* / η`. |
 | [compute_bubbleforce.py](bubbleforce/analysis/compute_bubbleforce.py) | `compute_bubbleforce`: finds `κ*`, the largest curvature coupling the frozen kernel tolerates. |
 | [run.py](run.py) | `save_predicted_bubbleforce` calculates predictions and writes `predicted_equilibrium.csv`. |
 
@@ -320,6 +322,7 @@ Predicted ζ (no model needed):
 
 - `eigenvalues.csv`: `update, tokens, mode, eigenvalue, residual, stopping_reason`. Mode 1 is measured ζ.
 - `measurement_results.json`:
+  - `operator`: `canonical_pathspring_v1`; older reports use different units.
   - `update`: the saved training update being measured.
   - `measurements[].tokens`: the validation token count used for each completed solve.
   - `measurements[].readouts[]`: the eigenvalues at every basis size, which show how the estimate converged.
@@ -355,4 +358,4 @@ Read these papers in order when interpreting stability measurements:
 5. **Andreyev and Beneventano.** [Edge of Stochastic Stability: Revisiting the Edge of Stability for SGD](https://arxiv.org/abs/2412.20553), with an [author's companion explanation](https://poggio-lab.mit.edu/blogsupdates/edge-of-stochastic-stability-part-ii). Read their experiments using batch sharpness, the expected minibatch curvature along the corresponding minibatch gradient. Compare their measurement procedure with this repository's fixed-validation measurements before interpreting minibatch training behavior.
 6. **Andreyev et al., 2026 preprint.** [Momentum Further Constrains Sharpness at the Edge of Stochastic Stability](https://arxiv.org/abs/2604.14108). Examine their different momentum effects at small and large batch sizes when interpreting the increased- and decreased-momentum experiments. Establish the corresponding Muon analysis before applying their SGD stability thresholds to these runs.
 
-When applying these papers here, first inspect `compute_optimizer_jvp` in [muon_jvp.py](bubbleforce/analysis/muon_jvp.py). During measurement, the code applies the historical response `J_P(M)[H v] + (weight_decay / N) v`, holding older gradients and Adam parameters fixed. Use this operator definition when comparing measured eigenvalues with a paper's sharpness definition. Evaluate fixed-state stability predictions separately from changes observed along a training run.
+When applying these papers here, first inspect `compute_optimizer_jvp` in [muon_jvp.py](bubbleforce/analysis/muon_jvp.py). During measurement, the code applies canonical `J_T/c0` in mean-loss coordinates, holding older gradients and Adam parameters fixed and excluding the decay identity shift. Use this operator definition when comparing measured eigenvalues with a paper's sharpness definition. Evaluate fixed-state stability predictions separately from changes observed along a training run.

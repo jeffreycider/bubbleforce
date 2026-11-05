@@ -83,13 +83,13 @@ We also provide restart checkpoints to resume training at various steps. Command
 
 ## Measure $\zeta$ at a snapshot or a given frequency
 
-To compute bubbleforce, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
+To compute pathspring, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
 
-After training finishes, the runner loads each saved update and estimates the largest positive real eigenvalue of $R v = J_P(M)[H v] + (\gamma_{\mathrm{wd}} / N)v$, using 16,777,216 validation tokens per measurement. It applies the mean-loss Hessian $H$, differentiates the Muon transformation $P$ at saved summed-gradient momentum $M$, then adds the decay response using the training-token count $N$ and decay coefficient $\gamma_{\mathrm{wd}}$.
+After training finishes, the runner loads each saved update and estimates $\zeta=\lambda_{\max}^{+}(J_T/c_0)$, using the mean-loss Hessian over 16,777,216 validation tokens. The momentum JVP adapter converts summed-gradient checkpoint storage to mean-loss coordinates while preserving the saved BF16 Newton–Schulz primals. The measured operator has no $c_0$ multiplier or decoupled-decay identity shift.
 
-For comparison, the runner calculates $\zeta_{\mathrm{pred}} = (\kappa_* / \eta + \gamma_{\mathrm{wd}}) / N$. It finds the kernel boundary $\kappa_*$ using the actual decay step $\eta\gamma_{\mathrm{wd}}$, where $\eta$ is the learning rate.
+For comparison, the runner calculates $\zeta_{\mathrm{pred}} = F/\eta$. Bubbleforce $F=\kappa_*$ is the first unit-circle crossing of the kernel's characteristic polynomial, including the decay step $\eta\gamma_{\mathrm{wd}}$. Token counts do not enter this prediction.
 
-Use the saved summed-gradient momentum directly when evaluating $J_P(M)[Hv]$. Divide the decay term and prediction by the training-token count $N$ to report the historical convention used in the archived plots. Average the Hessian over the validation tokens separately.
+New measurement reports identify their operator as `canonical_pathspring_v1`. Archived plots retain their historical response $r$; with uniform decay, convert the corresponding eigenmode using $\zeta=N_{\mathrm{train}}r-\gamma_{\mathrm{wd}}$. Here $N_{\mathrm{train}}$ is the saved training batch token count (524,288 for the supplied recipes), not the validation token count. The same conversion applies to archived predictions. Only positive real eigenvalues of the canonical operator qualify as pathspring.
 
 If, for example, the residual error from the Arnoldi eigenvalue approximation is too large, we provide [commands to rerun Arnoldi iterations in AGENTS.md](AGENTS.md#rerun-arnoldi-with-a-larger-krylov-basis) with a larger Krylov basis.
 

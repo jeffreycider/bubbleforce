@@ -31,7 +31,7 @@ def compute_one_matrix_jvp(monkeypatch, momentum, config, direction, gradient_re
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("learning_rate", [1e-4, .02])
 @pytest.mark.parametrize("weight_decay", [0., .1])
-def test_historical_response_converts_to_differentiated_weight_update(
+def test_pathspring_response_converts_to_differentiated_weight_update(
     monkeypatch, shape, dtype, learning_rate, weight_decay,
 ):
     generator = torch.Generator().manual_seed(42)
@@ -58,8 +58,8 @@ def test_historical_response_converts_to_differentiated_weight_update(
     expected = ((direction.double() - next_weight_response) / learning_rate).to(dtype)
     actual = compute_one_matrix_jvp(monkeypatch, momentum, config, direction, gradient_response)
     converted = (
-        config.current_gradient_coefficient * config.training_batch_tokens * actual.double()
-        + (1 - config.current_gradient_coefficient) * weight_decay * direction.double()
+        config.current_gradient_coefficient * actual.double()
+        + weight_decay * direction.double()
     ).to(dtype)
     # Scaling tangents before or after the iterations changes FP32 rounding.
     relative_error = (converted - expected).norm() / expected.norm()
@@ -67,7 +67,7 @@ def test_historical_response_converts_to_differentiated_weight_update(
 
 
 @pytest.mark.parametrize("training_tokens", [8, 524288])
-def test_muon_weight_decay_response_at_tiny_learning_rate(monkeypatch, training_tokens):
+def test_pathspring_excludes_weight_decay_at_tiny_learning_rate(monkeypatch, training_tokens):
     weight = torch.eye(3, dtype=torch.float64)
     direction = torch.ones_like(weight)
     config = MuonStepConfig(
@@ -77,11 +77,11 @@ def test_muon_weight_decay_response_at_tiny_learning_rate(monkeypatch, training_
     actual = compute_one_matrix_jvp(
         monkeypatch, weight, config, direction, torch.zeros_like(weight),
     )
-    expected = (config.weight_decay / config.training_batch_tokens) * direction
+    expected = torch.zeros_like(direction)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
-def test_historical_response_is_independent_of_current_gradient_coefficient(monkeypatch):
+def test_pathspring_is_independent_of_current_coefficient_and_decay(monkeypatch):
     generator = torch.Generator().manual_seed(19)
     momentum, direction, gradient_response = [
         torch.randn((3, 7), dtype=torch.float64, generator=generator) for _ in range(3)
@@ -89,9 +89,28 @@ def test_historical_response_is_independent_of_current_gradient_coefficient(monk
     responses = [
         compute_one_matrix_jvp(
             monkeypatch, momentum,
-            MuonStepConfig(learning_rate=.02, weight_decay=.1,
+            MuonStepConfig(learning_rate=.02, weight_decay=decay,
                            current_gradient_coefficient=c0, training_batch_tokens=8),
             direction, gradient_response,
-        ) for c0 in [.2, .7]
+        ) for c0, decay in [(.2, .1), (.7, .3)]
     ]
+    torch.testing.assert_close(responses[0], responses[1], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("shape", [(4, 4), (3, 7), (7, 3)])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_pathspring_is_invariant_to_training_token_duplication(monkeypatch, shape, dtype):
+    generator = torch.Generator().manual_seed(77)
+    mean_momentum, direction, mean_hvp = [
+        torch.randn(shape, dtype=dtype, generator=generator) for _ in range(3)
+    ]
+    responses = [
+        compute_one_matrix_jvp(
+            monkeypatch, tokens * mean_momentum,
+            MuonStepConfig(learning_rate=.025, weight_decay=.05,
+                           current_gradient_coefficient=.0975, training_batch_tokens=tokens),
+            direction, mean_hvp,
+        ) for tokens in [524288, 1048576]
+    ]
+    # Duplicating every training token doubles summed momentum, but not pathspring.
     torch.testing.assert_close(responses[0], responses[1], rtol=0, atol=0)
