@@ -251,9 +251,12 @@ def main(config: MeasurementConfig | None = None) -> None:
         warm_start = config.warm_start
         for update in config.measured_updates:
             output = config.output_dir / "bubbleforce" / str(update)
-            run_analysis(config, update=update, output=output, warm_start=warm_start)
+            measurements = run_analysis(
+                config, update=update, output=output, warm_start=warm_start,
+            )
             if config.reuse_previous_vector:
-                warm_start = output
+                final_readout = measurements[-1]["readouts"][-1]
+                warm_start = output if final_readout["eigenvalues"] else None
 
 
 if __name__ == "__main__":

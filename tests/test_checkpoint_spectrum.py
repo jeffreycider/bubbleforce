@@ -193,6 +193,7 @@ def test_worker_reuses_shared_config_and_selects_warm_start(tmp_path, monkeypatc
     calls = []
     def record_measurement(shared_config, **arguments):
         calls.append((shared_config, arguments))
+        return [dict(readouts=[dict(eigenvalues=[1.])])]
     monkeypatch.setattr(analysis, 'run_analysis', record_measurement)
     if from_cli:
         config_path = tmp_path / 'measurement.yaml'
@@ -243,9 +244,42 @@ def test_load_initial_eigenvector_checks_saved_layout(tmp_path):
 
     layout = ShardedVectorConfig([[('weight', (2, 3))]])
     assert load_initial_eigenvector(None, layout) is None
+    with pytest.raises(FileNotFoundError):
+        load_initial_eigenvector(tmp_path, layout)
     vector = torch.arange(6, dtype=torch.float32)
     torch.save(vector, tmp_path / 'current_vector_rank0.pt')
     torch.testing.assert_close(load_initial_eigenvector(tmp_path, layout), vector)
     torch.save(vector[:3], tmp_path / 'current_vector_rank0.pt')
     with pytest.raises(ValueError, match='vector size'):
         load_initial_eigenvector(tmp_path, layout)
+
+
+@pytest.mark.parametrize("earlier_eigenpair", [False, True])
+def test_empty_final_solve_uses_random_start_at_next_update(
+    tmp_path, monkeypatch, earlier_eigenpair,
+):
+    from bubbleforce.analysis.eigensolver import solve_eigenpairs
+
+    config = make_gpt_capture(tmp_path)
+    config = replace(config, measured_updates=(2, 3), token_counts=(2, 4), reuse_previous_vector=True)
+    source = config.capture_dir / "rank0" / "metrics_snapshot_000002.pt"
+    snapshot = torch.load(source, weights_only=True)
+    torch.save(dict(snapshot, update=3), source.with_name("metrics_snapshot_000003.pt"))
+    starts = []
+
+    def solve_known_operator(config, checkpoint, batch, tokens, initial_vector=None):
+        starts.append((checkpoint.update, tokens, initial_vector is None))
+        sign = 1. if earlier_eigenpair and tokens == 2 else -1.
+        return solve_eigenpairs(
+            lambda vector: sign * vector, checkpoint.vector_config, config.eigensolver,
+            initial_basis_vector=initial_vector,
+        )
+
+    monkeypatch.setattr(analysis, "compute_bubbleforce_eigenpairs", solve_known_operator)
+    analysis.main(config)
+    assert (3, 2, True) in starts
+    for update in config.measured_updates:
+        output = config.output_dir / "bubbleforce" / str(update)
+        saved = json.loads((output / "measurement_results.json").read_text())
+        assert saved["measurements"][-1]["readouts"][-1]["eigenvalues"] == []
+        assert (output / "current_vector_rank0.pt").is_file() == earlier_eigenpair
