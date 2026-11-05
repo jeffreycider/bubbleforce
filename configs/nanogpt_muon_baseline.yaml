@@ -93,8 +93,8 @@ measurement:
       - 128
     comparison_window: 2
     eigenvalue_rtol: 0.001
-    subspace_tolerance: 0.01
-    breakdown_rtol: 1.0e-12
+    subspace_tol: 0.01
+    span_exhaustion_tol: 1.0e-12
     symmetric: false
     start_seed: 921
   measure_every: 50

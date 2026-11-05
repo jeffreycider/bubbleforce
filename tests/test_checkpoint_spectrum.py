@@ -51,7 +51,7 @@ def make_gpt_capture(tmp_path):
                     buffers=dict(model.named_buffers()), post_insertion_prepolar_momentum=momenta,
                     training_batch_tokens=8,
                     settings=[dict(pattern=pattern, optimizer='muon', groups=[dict(lr=.025, weight_decay=.05)])])
-    recipe = dict(train_steps=4, optimizer_groups=[dict(
+    recipe = dict(train_steps=4, batch_tokens=8, optimizer_groups=[dict(
         pattern=pattern, optimizer='muon',
         lr_schedule=dict(kind='piecewise_constant', boundaries=[], factors=[1.]),
         hyperparams=dict(lr=.025, weight_decay=.05, momentum=dict(kind='ema', decay=.9)),

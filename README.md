@@ -85,7 +85,11 @@ We also provide restart checkpoints to resume training at various steps. Command
 
 To compute bubbleforce, $\zeta_t$, the runner saves weights and momentum at specified updates during training. Here, $t$ is the training update.
 
-After training finishes, it loads each saved update and estimates the largest positive real eigenvalue of the normalized Muon restoring response, using 16,777,216 validation tokens per measurement.
+After training finishes, the runner loads each saved update and estimates the largest positive real eigenvalue of $R v = J_P(M)[H v] + (\gamma_{\mathrm{wd}} / N)v$, using 16,777,216 validation tokens per measurement. It applies the mean-loss Hessian $H$, differentiates the Muon transformation $P$ at saved summed-gradient momentum $M$, then adds the decay response using the training-token count $N$ and decay coefficient $\gamma_{\mathrm{wd}}$.
+
+For comparison, the runner calculates $\zeta_{\mathrm{pred}} = (\kappa_* / \eta + \gamma_{\mathrm{wd}}) / N$. It finds the kernel boundary $\kappa_*$ using the actual decay step $\eta\gamma_{\mathrm{wd}}$, where $\eta$ is the learning rate.
+
+Use the saved summed-gradient momentum directly when evaluating $J_P(M)[Hv]$. Divide the decay term and prediction by the training-token count $N$ to report the historical convention used in the archived plots. Average the Hessian over the validation tokens separately.
 
 If, for example, the residual error from the Arnoldi eigenvalue approximation is too large, we provide [commands to rerun Arnoldi iterations in AGENTS.md](AGENTS.md#rerun-arnoldi-with-a-larger-krylov-basis) with a larger Krylov basis.
 

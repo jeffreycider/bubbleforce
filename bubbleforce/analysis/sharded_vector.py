@@ -1,11 +1,16 @@
 """Pack weight-shaped tensors into vectors split across GPUs; reduce dot products."""
 from collections.abc import Mapping
 from math import prod
+from typing import TypeAlias
 
 import torch
 import torch.distributed as dist
 
 from configs.measurement_config import ShardedVectorConfig
+
+
+ShardedVector: TypeAlias = torch.Tensor
+ShardedKrylovBasisVector: TypeAlias = torch.Tensor
 
 
 def pack_tensor(
@@ -74,8 +79,8 @@ def unpack_vector(
 
 
 def compute_global_dot(
-    first_vector: torch.Tensor,
-    second_vector: torch.Tensor,
+    first_vector: ShardedVector,
+    second_vector: ShardedVector,
     config: ShardedVectorConfig,
 ) -> float:
     """Sum the coordinate dot products across ranks, excluding padding.
@@ -101,7 +106,7 @@ def compute_global_dot(
     return dot_product.item()
 
 
-def compute_global_norm(vector: torch.Tensor, config: ShardedVectorConfig) -> float:
+def compute_global_norm(vector: ShardedVector, config: ShardedVectorConfig) -> float:
     """Compute a global Euclidean norm; all ranks must participate.
 
     Args:
@@ -114,7 +119,7 @@ def compute_global_norm(vector: torch.Tensor, config: ShardedVectorConfig) -> fl
     return compute_global_dot(vector, vector, config) ** 0.5
 
 
-def get_random_sharded_unit_vector(seed: int, config: ShardedVectorConfig) -> torch.Tensor:
+def get_random_sharded_unit_vector(seed: int, config: ShardedVectorConfig) -> ShardedVector:
     """Draw a globally normalized direction; all ranks must participate.
 
     Args:

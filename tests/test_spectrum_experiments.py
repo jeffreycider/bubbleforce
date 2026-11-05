@@ -442,3 +442,39 @@ def test_zero_learning_rate_records_an_unavailable_prediction():
     rows = list(predict_bubbleforce(training, [0, 1]))
     assert rows[0]['predicted_zeta'] > 0
     assert rows[1]['predicted_zeta'] is None
+
+
+def test_prediction_uses_historical_units_and_actual_decay(monkeypatch):
+    from importlib import import_module
+    analysis = import_module("bubbleforce.run_analysis")
+    training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
+    training['batch_tokens'] = 8
+    group = next(group for group in training['optimizer_groups'] if group['optimizer'] == 'muon')
+    group['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[], factors=[1.])
+    group['hyperparams'].update(lr=.02, weight_decay=.1,
+        momentum=dict(kind='ema', decay=.95, nesterov_mix=.95))
+    calls = []
+    def boundary(kernel, *, decay_step):
+        calls.append((kernel.copy(), decay_step))
+        return 26.
+    monkeypatch.setattr(analysis, 'compute_bubbleforce', boundary)
+    result = list(analysis.predict_bubbleforce(training, [1000]))[0]['predicted_zeta']
+    assert result == pytest.approx((26. / .02 + .1) / 8)
+    kernel, decay_step = calls[0]
+    assert decay_step == pytest.approx(.02 * .1)
+    assert kernel[0] == pytest.approx(.0975)
+    training['batch_tokens'] = 16
+    assert list(analysis.predict_bubbleforce(training, [1000]))[0]['predicted_zeta'] == pytest.approx(result / 2)
+
+
+def test_historical_prediction_matches_plateau_reference():
+    training = experiment_for('configs/nanogpt_muon_baseline.yaml')[0].to_training_dict()
+    group = next(group for group in training['optimizer_groups'] if group['optimizer'] == 'muon')
+    group['lr_schedule'] = dict(kind='piecewise_constant', boundaries=[], factors=[1.])
+    group['hyperparams'].update(
+        lr=.025, weight_decay=.05,
+        momentum=dict(kind='ema', decay=.95, nesterov_mix=.95),
+    )
+    training['batch_tokens'] = 524288
+    result = list(predict_bubbleforce(training, [2000]))[0]['predicted_zeta']
+    assert result == pytest.approx(0.002050858279960198, rel=1e-10, abs=0.)

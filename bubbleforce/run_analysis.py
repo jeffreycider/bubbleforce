@@ -1,4 +1,4 @@
-"""Measure restoring-response eigenpairs from saved training snapshots.
+"""Measure historical Muon response eigenpairs from saved training snapshots.
 
 Read a measurement YAML file from the command line, load each selected update,
 then save eigenvalue reports and eigenvector shards. Launch with torchrun for
@@ -17,7 +17,7 @@ import torch.distributed as dist
 from bubbleforce.analysis.eigensolver import EigenpairReadout, solve_eigenpairs
 from bubbleforce.analysis.loss_hessian import LossHessian
 from bubbleforce.analysis.compute_bubbleforce import compute_bubbleforce
-from bubbleforce.analysis.muon_step import compute_optimizer_jvp
+from bubbleforce.analysis.muon_jvp import compute_optimizer_jvp
 from configs.measurement_config import LossHessianConfig, MeasurementConfig
 from bubbleforce.load_checkpoint import (
     MeasurementCheckpoint, load_checkpoint_for_analysis,
@@ -75,7 +75,8 @@ def initialize_analysis_process_group(config: MeasurementConfig):
 def predict_bubbleforce(training_config: dict, updates=None):
     """Apply the single Muon group's schedules and yield update/prediction pairs.
 
-    Use the available gradient history at each update to calculate the boundary.
+    Use the available gradient history and actual decay to calculate kappa_star.
+    Yield (kappa_star / learning_rate + weight_decay) / training batch tokens.
     Yield None for a nonpositive learning rate or current-gradient weight.
     Raise ValueError if the group count, update, or kernel is invalid.
     """
@@ -113,8 +114,13 @@ def predict_bubbleforce(training_config: dict, updates=None):
         predicted_zeta = None
         if learning_rate > 0 and current_gradient_coefficient > 0:
             decay_step = learning_rate * weight_decay
-            predicted_bubbleforce = compute_bubbleforce(momentum_kernel.numpy(), decay_step=decay_step)
-            predicted_zeta = (decay_step + current_gradient_coefficient * predicted_bubbleforce) / learning_rate
+            predicted_bubbleforce = compute_bubbleforce(
+                momentum_kernel.numpy(), decay_step=decay_step,
+            )
+            training_tokens = training_config["batch_tokens"]
+            predicted_zeta = (
+                predicted_bubbleforce / learning_rate + weight_decay
+            ) / training_tokens
         yield dict(update=update, predicted_zeta=predicted_zeta)
 
 
@@ -125,10 +131,11 @@ def compute_bubbleforce_eigenpairs(
     token_count: int,
     initial_vector: torch.Tensor | None = None,
 ) -> tuple[list[EigenpairReadout], torch.Tensor]:
-    """Estimate eigenpairs of the saved Muon update's restoring response.
+    """Estimate eigenpairs of the historical Muon response.
 
-    Apply validation loss Hessian products through the normalized Muon
-    displacement while holding older gradients and Adam parameters fixed.
+    Apply J_P(M)[H v] + (weight_decay / training batch tokens) v, using
+    validation-mean Hessian products and saved summed-gradient momentum.
+    Hold older gradients and Adam parameters fixed.
     Clear cached Hessian programs after solving, including on failure.
 
     Args:
