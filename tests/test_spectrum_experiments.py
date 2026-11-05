@@ -101,7 +101,9 @@ def test_lr_interventions_change_every_group_at_the_saved_iteration(name, after)
     for group in config['optimizer_groups']:
         schedule = group['lr_schedule']
         assert learning_rate_factor(schedule, 2008, 3250) == 1.
-        assert learning_rate_factor(schedule, 2009, 3250) == after
+        assert learning_rate_factor(schedule, 2009, 3250) == 1.
+        assert learning_rate_factor(schedule, 2010, 3250) == after
+        assert learning_rate_factor(schedule, 2011, 3250) == after
         assert learning_rate_factor(schedule, 3000, 3250) == after
     muon = config['optimizer_groups'][2]
     assert muon['hyperparams']['momentum'] == dict(kind='ema', decay=.95, nesterov_mix=.95)
@@ -111,20 +113,29 @@ def test_lr_interventions_change_every_group_at_the_saved_iteration(name, after)
     ('configs/increased_momentum.yaml', .9750961447125188),
     ('configs/decreased_momentum.yaml', .8990666066208468),
 ])
-@pytest.mark.parametrize('step', [2008, 2009, 2010, 2020, 2265])
-def test_momentum_intervention_retains_the_pre_switch_decay_history(name, beta, step):
+@pytest.mark.parametrize('step', [2008, 2009, 2010, 2011, 2020, 2265])
+def test_momentum_interventions_reweight_entire_history_at_switch(name, beta, step):
     config = experiment_for(name)[0].to_training_dict()
     scheduler = momentum_scheduler(config['optimizer_groups'][2]['hyperparams']['momentum'])
-    mix = .95 if step < 2009 else beta
-    product, expected = 1., []
-    for age in range(256):
-        decay = .95 if step - age < 2009 else beta
-        expected.append(mix * (1 - decay) * product)
-        product *= decay
-    expected[0] += 1 - mix
-    torch.testing.assert_close(scheduler(step).weights, torch.tensor(expected))
+    beta = .95 if step < 2010 else beta
+    expected = torch.tensor([beta * (1 - beta) * beta ** age for age in range(256)])
+    expected[0] += 1 - beta
+    torch.testing.assert_close(scheduler(step).weights, expected)
     for group in config['optimizer_groups']:
         assert learning_rate_factor(group['lr_schedule'], step, 3250) == 1.
+
+
+@pytest.mark.parametrize('name,factor', [
+    ('configs/increased_momentum.yaml', 2.),
+    ('configs/decreased_momentum.yaml', .5),
+    ('configs/lr_double.yaml', .5),
+    ('configs/lr_half.yaml', 2.),
+])
+def test_intervention_predictions_change_immediately(name, factor):
+    config = experiment_for(name)[0].to_training_dict()
+    rows = list(predict_bubbleforce(config, [2009, 2010, 2011, 2020, 2265]))
+    assert rows[1]['predicted_zeta'] == pytest.approx(factor * rows[0]['predicted_zeta'], rel=1e-3)
+    assert all(row['predicted_zeta'] == rows[1]['predicted_zeta'] for row in rows[1:])
 
 
 def test_original_and_maxent_keep_cooldown():

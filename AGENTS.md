@@ -60,10 +60,10 @@ python3 run.py CONFIG_PATH [key=value ...] [--print-settings]
 | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `nanogpt_muon_baseline` | Train with the baseline Muon settings and learning-rate cooldown.                                               |
 | `maxentslop`            | Switch to the MaxEntSlop momentum kernel at update `1000`, then interpolate its settings through update `3250`. |
-| `lr_double`             | Multiply all optimizer learning rates by `2` at update `2009`.                                                  |
-| `lr_half`               | Multiply all optimizer learning rates by `0.5` at update `2009`.                                                |
-| `increased_momentum`    | Set Muon decay and Nesterov mix to `0.9750961447125188` at update `2009`.                                       |
-| `decreased_momentum`    | Set Muon decay and Nesterov mix to `0.8990666066208468` at update `2009`.                                       |
+| `lr_double`             | Multiply all optimizer learning rates by `2` at update index `2010`.                                                  |
+| `lr_half`               | Multiply all optimizer learning rates by `0.5` at update index `2010`.                                                |
+| `increased_momentum`    | At update index `2010`, reweight the stored gradients with Muon decay and Nesterov mix `0.9750961447125188`.                                       |
+| `decreased_momentum`    | At update index `2010`, reweight the stored gradients with Muon decay and Nesterov mix `0.8990666066208468`.                                       |
 
 
 
@@ -167,7 +167,7 @@ The bucket was made with an older codebase called *muoff*. Its README shows `pyt
 
 | Bucket experiment                          | Use with `run.py`                                               | Resume overrides (restarts)                                 |
 | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------- |
-| `decreased_momentum`, `increased_momentum` | `configs/decreased_momentum.yaml`, `configs/increased_momentum.yaml` | `training.train_steps=6475 training.microbatch_sequences=8` |
+| `decreased_momentum`, `increased_momentum` | Supplied configs for snapshots; original training recipe for archived restarts | `training.train_steps=6475 training.microbatch_sequences=8`, plus original momentum schedules |
 | `lr_double`, `lr_half`                     | `configs/lr_double.yaml`, `configs/lr_half.yaml` (snapshots only) | —                                                           |
 | `original_implementation`                  | `configs/nanogpt_muon_baseline.yaml` (restarts at 1951 and 2801)             | none                                                        |
 | `baseline` (updates 1980–2000)             | `configs/nanogpt_muon_baseline.yaml` (snapshots only; shared pre-2009 trunk) | —                                                           |
@@ -175,7 +175,7 @@ The bucket was made with an older codebase called *muoff*. Its README shows `pyt
 | `shared_trunk` (checkpoint 2001)           | **cannot resume here**: it stores `protocol_sha256: null`       | —                                                           |
 
 
-All restarts and snapshots were saved with 8 workers. With the overrides above, this repository's fingerprints match the bucket's `COMPLETE.json` hashes: `a92bb65b…` for decreased, `246bb583…` for increased, and `57d2edad…` for `nanogpt_muon_baseline`.
+All restarts and snapshots were saved with 8 workers. For archived decreased-momentum (`a92bb65b…`) and increased-momentum (`246bb583…`) restarts, restore the original training recipe, including the EMA decay schedules starting at update `2009`. The supplied momentum configs switch the complete kernel at update index `2010`; the learning-rate configs also intervene at `2010`. These changes alter the restart fingerprints. The `nanogpt_muon_baseline` fingerprint remains `57d2edad…`.
 
 Bucket caveats:
 
@@ -219,11 +219,28 @@ To check sensitivity to the validation sample size separately, use `'measurement
 
 ### Restart training from a checkpoint
 
+For this archived restart, prepare `decreased_momentum_original.yaml` from the supplied config. Restore the momentum specification below, then compare the resolved settings with the downloaded `training_config.json`:
+
+```yaml
+momentum:
+  kind: ema
+  decay:
+    kind: step
+    before: 0.95
+    after: 0.8990666066208468
+    start_step: 2009
+  nesterov_mix:
+    kind: step
+    before: 0.95
+    after: 0.8990666066208468
+    start_step: 2009
+```
+
 ```bash
 hf buckets sync \
   hf://buckets/jacknzheng/bubbleforce/restarts/decreased_momentum/decreased_momentum__checkpoint_002201 \
   ./decreased_momentum__checkpoint_002201                    # about 95 GB
-python3 run.py configs/decreased_momentum.yaml \
+python3 run.py decreased_momentum_original.yaml \
   training.train_steps=6475 training.microbatch_sequences=8 \
   training.resume_checkpoint=./decreased_momentum__checkpoint_002201/checkpoint_002201 \
   'measurement.measured_updates=[2210]' \

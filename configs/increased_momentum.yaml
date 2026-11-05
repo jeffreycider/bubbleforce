@@ -27,17 +27,16 @@ training:
         lr: 0.025
         weight_decay: 0.05
         momentum:
-          kind: ema
-          decay:
-            kind: step
-            before: 0.95
-            after: 0.9750961447125188
-            start_step: 2009
-          nesterov_mix:
-            kind: step
-            before: 0.95
-            after: 0.9750961447125188
-            start_step: 2009
+          kind: switch
+          start_step: 2010
+          before:
+            kind: ema
+            decay: 0.95
+            nesterov_mix: 0.95
+          after:
+            kind: ema
+            decay: 0.9750961447125188
+            nesterov_mix: 0.9750961447125188
       lr_schedule:
         kind: piecewise_constant
         boundaries: []
