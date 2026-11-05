@@ -1,4 +1,4 @@
-"""Apply the historical Muon response to a weight perturbation."""
+"""Apply the canonical Muon pathspring operator to a weight perturbation."""
 
 import torch
 from torch import Tensor
@@ -54,18 +54,31 @@ def compute_newton_schulz_jvp(momentum_matrix: Tensor, momentum_response: Tensor
     return (x.mT, dx.mT) if tall else (x, dx)
 
 
+def compute_mean_momentum_jvp(
+    saved_momentum: Tensor, mean_momentum_response: Tensor, *, training_batch_tokens: int,
+) -> Tensor:
+    """Adapt summed-gradient checkpoint momentum to mean-loss coordinates.
+
+    Return N * J_P(M_sum)[u], the response to a mean-momentum perturbation u.
+    Keep the saved momentum's BF16 primals and normalization epsilon unchanged;
+    rescale the tangent output instead of renormalizing the saved momentum.
+    N is the training batch size, not the validation HVP token count.
+    """
+    _, response = compute_newton_schulz_jvp(saved_momentum, mean_momentum_response)
+    return response * training_batch_tokens
+
+
 def compute_optimizer_jvp(
     checkpoint: MeasurementCheckpoint,
     hessian: LossHessian,
     direction_shard: torch.Tensor,
 ) -> torch.Tensor:
-    """Apply the historical response J_P(M)[H v] + (weight_decay / N) v.
+    """Apply J_T / c0 in mean-loss coordinates, excluding decoupled decay.
 
     Compute the validation-mean Hessian product H v across Muon matrices.
-    Pass each matrix's product through the Newton-Schulz derivative at its
-    saved summed-gradient momentum, then apply the matrix-size scale.
-    Add weight_decay / N times the weight direction, using the saved training
-    token count N. Hold older gradients and Adam parameters fixed.
+    Pass each matrix's product through the mean-momentum adapter, then apply
+    the matrix-size scale. Hold older gradients and Adam parameters fixed.
+    Weight decay enters the stability polynomial, not this operator.
 
     Run on every rank. Return the flattened local response with zero padding.
     """
@@ -74,24 +87,16 @@ def compute_optimizer_jvp(
         compute_distributed_hvp(vector_config, hessian, direction_shard),
         config=vector_config,
     )
-    weight_perturbations = unpack_vector(direction_shard, config=vector_config)
-
     update_responses = {}
     for name, momentum in checkpoint.momenta.items():
         step_config = checkpoint.step_configs[name]
-        weight_perturbation = weight_perturbations[name]
         momentum_response = gradient_perturbations[name]
-        _, newton_schulz_response = compute_newton_schulz_jvp(
-            momentum, momentum_response,
+        newton_schulz_response = compute_mean_momentum_jvp(
+            momentum, momentum_response, training_batch_tokens=step_config.training_batch_tokens,
         )
         scaled_update_response = (
             Muon.shape_scale(momentum) * newton_schulz_response
         )
-        update_responses[name] = (
-            scaled_update_response.double()
-            + (
-                step_config.weight_decay / step_config.training_batch_tokens
-            ) * weight_perturbation.double()
-        ).to(weight_perturbation.dtype)
+        update_responses[name] = scaled_update_response
 
     return pack_tensor(update_responses, config=vector_config)

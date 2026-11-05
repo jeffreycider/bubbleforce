@@ -109,7 +109,8 @@ def test_tiny_gpt_checkpoint_to_spectrum_outputs(tmp_path, monkeypatch):
     config = make_gpt_capture(tmp_path)
     result = run_analysis(config, update=2, output=config.output_dir / "bubbleforce" / "2")
     saved = json.loads((config.output_dir / 'bubbleforce' / '2' / 'measurement_results.json').read_text())
-    assert set(saved) == {'update', 'measurements'}
+    assert set(saved) == {'update', 'operator', 'measurements'}
+    assert saved['operator'] == 'canonical_pathspring_v1'
     assert saved['measurements'][0]['tokens'] == result[0]['tokens']
     assert saved['measurements'][0]['readouts'][-1]['eigenvalues'] == result[0]['readouts'][-1]['eigenvalues']
     assert saved['update'] == 2
@@ -144,7 +145,8 @@ def test_two_rank_checkpoint_measurement_writes_all_vector_shards(tmp_path):
     for update in config.measured_updates:
         output = config.output_dir / 'bubbleforce' / str(update)
         saved = json.loads((output / 'measurement_results.json').read_text())
-        assert set(saved) == {'update', 'measurements'}
+        assert set(saved) == {'update', 'operator', 'measurements'}
+        assert saved['operator'] == 'canonical_pathspring_v1'
         assert saved['update'] == update
         assert saved['measurements'][0]['tokens'] == 4
         assert saved['measurements'][0]['readouts'][-1]['residuals']

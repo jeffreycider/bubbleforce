@@ -47,6 +47,22 @@ def test_staged_whole_hvp_matches_autodiff_runtime_tokens_and_directions(
     staged.clear_program_cache()
 
 
+@pytest.mark.parametrize("microbatch", [1, 3, 8])
+def test_mean_hvp_is_invariant_to_validation_token_duplication(microbatch):
+    torch.manual_seed(8)
+    model = Network()
+    batch = (torch.randn(5, 3, dtype=torch.float64), torch.randn(5, 2, dtype=torch.float64))
+    direction = (torch.randn_like(model.a), torch.randn_like(model.b))
+    products = []
+    for repeat in (1, 2):
+        repeated = tuple(value.repeat(repeat, 1) for value in batch)
+        hessian = LossHessian(model, ["a", "b"], repeated, microbatch,
+                              global_tokens=repeated[1].numel(), config=LossHessianConfig(mode="trace"))
+        products.append(hessian(direction))
+    for original, duplicated in zip(*products):
+        torch.testing.assert_close(original, duplicated, rtol=1e-12, atol=1e-12)
+
+
 def test_hessian_freezes_adam_and_promotes_saved_bf16_parameters():
     m = Network().bfloat16()
     batch = (torch.randn(5, 3), torch.randn(5, 2))
