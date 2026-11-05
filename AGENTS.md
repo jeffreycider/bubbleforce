@@ -60,11 +60,12 @@ python3 run.py CONFIG_PATH [key=value ...] [--print-settings]
 | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `nanogpt_muon_baseline` | Train with the baseline Muon settings and learning-rate cooldown.                                               |
 | `maxentslop`            | Switch to the MaxEntSlop momentum kernel at update `1000`, then interpolate its settings through update `3250`. |
-| `lr_double`             | Multiply all optimizer learning rates by `2` at update index `2010`.                                                  |
-| `lr_half`               | Multiply all optimizer learning rates by `0.5` at update index `2010`.                                                |
-| `increased_momentum`    | At update index `2010`, reweight the stored gradients with Muon decay and Nesterov mix `0.9750961447125188`.                                       |
-| `decreased_momentum`    | At update index `2010`, reweight the stored gradients with Muon decay and Nesterov mix `0.8990666066208468`.                                       |
+| `lr_double`             | Multiply all optimizer learning rates by `2` at update index `2009`.                                                  |
+| `lr_half`               | Multiply all optimizer learning rates by `0.5` at update index `2009`.                                                |
+| `increased_momentum`    | At update index `2009`, reweight the stored gradients with Muon decay and Nesterov mix `0.9750961447125188`.                                       |
+| `decreased_momentum`    | At update index `2009`, reweight the stored gradients with Muon decay and Nesterov mix `0.8990666066208468`.                                       |
 
+For these four interventions, train update `2008` with the old settings and update `2009` with the new settings.
 
 
 
@@ -175,7 +176,7 @@ The bucket was made with an older codebase called *muoff*. Its README shows `pyt
 | `shared_trunk` (checkpoint 2001)           | **cannot resume here**: it stores `protocol_sha256: null`       | —                                                           |
 
 
-All restarts and snapshots were saved with 8 workers. For archived decreased-momentum (`a92bb65b…`) and increased-momentum (`246bb583…`) restarts, restore the original training recipe, including the EMA decay schedules starting at update `2009`. The supplied momentum configs switch the complete kernel at update index `2010`; the learning-rate configs also intervene at `2010`. These changes alter the restart fingerprints. The `nanogpt_muon_baseline` fingerprint remains `57d2edad…`.
+All restarts and snapshots were saved with 8 workers. For archived decreased-momentum (`a92bb65b…`) and increased-momentum (`246bb583…`) restarts, restore the original training recipe, including the EMA decay schedules starting at update `2009`. The supplied momentum configs switch the complete kernel at update index `2009`, which changes their restart fingerprints. The `nanogpt_muon_baseline` fingerprint remains `57d2edad…`.
 
 Bucket caveats:
 

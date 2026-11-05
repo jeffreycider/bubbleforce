@@ -28,7 +28,7 @@ training:
         weight_decay: 0.05
         momentum:
           kind: switch
-          start_step: 2010
+          start_step: 2009
           before:
             kind: ema
             decay: 0.95

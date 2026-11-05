@@ -101,7 +101,7 @@ def test_lr_interventions_change_every_group_at_the_saved_iteration(name, after)
     for group in config['optimizer_groups']:
         schedule = group['lr_schedule']
         assert learning_rate_factor(schedule, 2008, 3250) == 1.
-        assert learning_rate_factor(schedule, 2009, 3250) == 1.
+        assert learning_rate_factor(schedule, 2009, 3250) == after
         assert learning_rate_factor(schedule, 2010, 3250) == after
         assert learning_rate_factor(schedule, 2011, 3250) == after
         assert learning_rate_factor(schedule, 3000, 3250) == after
@@ -117,7 +117,7 @@ def test_lr_interventions_change_every_group_at_the_saved_iteration(name, after)
 def test_momentum_interventions_reweight_entire_history_at_switch(name, beta, step):
     config = experiment_for(name)[0].to_training_dict()
     scheduler = momentum_scheduler(config['optimizer_groups'][2]['hyperparams']['momentum'])
-    beta = .95 if step < 2010 else beta
+    beta = .95 if step < 2009 else beta
     expected = torch.tensor([beta * (1 - beta) * beta ** age for age in range(256)])
     expected[0] += 1 - beta
     torch.testing.assert_close(scheduler(step).weights, expected)
@@ -133,7 +133,7 @@ def test_momentum_interventions_reweight_entire_history_at_switch(name, beta, st
 ])
 def test_intervention_predictions_change_immediately(name, factor):
     config = experiment_for(name)[0].to_training_dict()
-    rows = list(predict_bubbleforce(config, [2009, 2010, 2011, 2020, 2265]))
+    rows = list(predict_bubbleforce(config, [2008, 2009, 2010, 2020, 2265]))
     assert rows[1]['predicted_zeta'] == pytest.approx(factor * rows[0]['predicted_zeta'], rel=1e-3)
     assert all(row['predicted_zeta'] == rows[1]['predicted_zeta'] for row in rows[1:])
 
